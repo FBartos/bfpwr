@@ -64,5 +64,12 @@ paper/old/
 paper/bfssd-changes.pdf
 paper/cache/
 
+# simulation transfer/staging artifacts
+simulations/corpus/*.tgz
+simulations/corpus/**/*.tgz
+simulations/corpus/*-stage-*/
+simulations/corpus/v1/
+simulations/downloads/
+
 # experimental functions
 package/R/bin2bf01.R
