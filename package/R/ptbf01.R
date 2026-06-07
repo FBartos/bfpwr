@@ -24,7 +24,7 @@ ptbf01. <- function(k, n, n1 = n, n2 = n, null = 0, plocation = 0,
         is.numeric(null),
         is.finite(null),
 
-         length(plocation) == 1,
+        length(plocation) == 1,
         is.numeric(plocation),
         is.finite(plocation),
 
@@ -67,18 +67,44 @@ ptbf01. <- function(k, n, n1 = n, n2 = n, null = 0, plocation = 0,
 
     ## determine df and effective sample size
     if (type == "two.sample") {
+        df <- n1 + n2 - 2
         neff <- 1/(1/n1 + 1/n2)
     } else {
+        df <- n1 - 1
         neff <- n1
     }
 
     ## determine effect estimate region where BF < k for specified sample size
+    dots <- list(...)
+    searchDots <- .bfpwr_integrate_dots(dots = dots,
+                                        rel.tol.default = 1e-2)
+    rootDots <- .bfpwr_uniroot_dots(dots = dots)
     se <- 1/sqrt(neff) # standard error of SMD assuming variance is known
     estsd <- sqrt(se^2 + dpsd^2) # standard deviation of SMD under design prior
     rootFun <- function(est) {
+        ## tbf01() tests against zero, so shift the analysis prior by null.
         tbf01(t = (est - null)/se, n1 = n1, n2 = n2,
               plocation = plocation - null, pscale = pscale, pdf = pdf,
               type = type, alternative = alternative, log = TRUE) - log(k)
+    }
+    rootFunSearch <- function(est) {
+        do.call(tbf01, c(list(
+            t = (est - null)/se, n1 = n1, n2 = n2,
+            plocation = plocation - null, pscale = pscale, pdf = pdf,
+            type = type, alternative = alternative, log = TRUE
+        ), searchDots)) - log(k)
+    }
+    region <- .tbf01_prior_region(plocation = plocation - null,
+                                  pscale = pscale, pdf = pdf,
+                                  alternative = alternative)
+    ## For boundary bracketing, use the fast direct integral as a scout. Any
+    ## candidate root is certified against the stable BF path before use.
+    rootFunFast <- function(est) {
+        do.call(.tbf01_log_fast, c(list(
+            t = (est - null)/se, df = df, neff = neff,
+            plocation = plocation - null, pscale = pscale,
+            pdf = pdf, region = region
+        ), searchDots)) - log(k)
     }
 
     if (alternative == "two.sided") {
@@ -152,6 +178,8 @@ ptbf01. <- function(k, n, n1 = n, n2 = n, null = 0, plocation = 0,
             logpow <- NaN
             logcomp <- NaN
         } else {
+            ## BF01 <= k is the union of the two normal tails; the complement
+            ## is the interval between any roots that were found.
             logpow <- min(0, .bfpwr_logspace_sum(c(logpowup, logpowlow)))
             if (!uperr && !lowerr) {
                 logcomp <- .bfpwr_lpnorm_interval(lower = lower, upper = upper,
@@ -168,37 +196,17 @@ ptbf01. <- function(k, n, n1 = n, n2 = n, null = 0, plocation = 0,
         ## one-sided alternatives
         if (!is.numeric(drange) && drange == "adaptive") {
             searchLimit <- 256
-            f0 <- suppressWarnings(rootFun(null))
-            if (!is.finite(f0)) {
-                crit <- structure("non-finite root start", class = "try-error")
-            } else {
-                if (f0 == 0) {
-                    crit <- null
-                } else {
-                    direction <- if (alternative == "greater") {
-                        if (f0 > 0) 1 else -1
-                    } else {
-                        if (f0 > 0) -1 else 1
-                    }
-                    steps <- c(0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128,
-                               searchLimit)
-                    crit <- structure("adaptive search limit reached",
-                                      class = c("bfpwr_ptbf01_search_limit",
-                                                "try-error"))
-                    for (step in steps) {
-                        x1 <- null + direction * se * step
-                        f1 <- suppressWarnings(rootFun(x1))
-                        if (is.finite(f1) && f0 * f1 <= 0) {
-                            interval <- sort(c(null, x1))
-                            crit <- try(stats::uniroot(f = rootFun,
-                                                       interval = interval,
-                                                       extendInt = "no",
-                                                       ...)$root,
-                                        silent = TRUE)
-                            break
-                        }
-                    }
-                }
+            f0 <- .bfpwr_root_value(f = rootFunSearch, x = null)
+            search <- do.call(.bfpwr_one_sided_adaptive_root, c(list(
+                certify_fun = rootFunSearch, scout_fun = rootFunFast,
+                alternative = alternative, origin = null, step_scale = se,
+                try_opposite = FALSE, search_limit = searchLimit
+            ), rootDots))
+            crit <- search$root
+            if (inherits(crit, "try-error") && search$search_limit_reached) {
+                crit <- structure("adaptive search limit reached",
+                                  class = c("bfpwr_ptbf01_search_limit",
+                                            "try-error"))
             }
         } else {
             crit <- try(stats::uniroot(f = rootFun,
@@ -218,6 +226,8 @@ ptbf01. <- function(k, n, n1 = n, n2 = n, null = 0, plocation = 0,
                     "a wider numeric 'drange' interval to search for exact ",
                     "bounds beyond this limit."
                 ))
+                ## No crossing was found within the finite scan. The sign at
+                ## the null determines whether all searched values are successes.
                 if (f0 < 0) {
                     logpow <- 0
                     logcomp <- -Inf
@@ -275,7 +285,12 @@ ptbf01. <- function(k, n, n1 = n, n2 = n, null = 0, plocation = 0,
 #'     critical values are searched for. Can be either set to a numerical range
 #'     or to \code{"adaptive"} (default) which determines the range in an
 #'     adaptive way from the other input parameters
-#' @param ... Other arguments passed to \code{stats::uniroot}
+#' @param ... Optional numerical controls. For numeric ranges and two-sided
+#'     adaptive searches, arguments are passed to \code{stats::uniroot}. In
+#'     adaptive one-sided searches, \code{subdivisions}, \code{rel.tol},
+#'     \code{abs.tol}, \code{stop.on.error}, and \code{keep.xy} are used for BF
+#'     integration, while \code{tol}, \code{maxiter}, \code{trace}, and
+#'     \code{check.conv} are passed to \code{stats::uniroot}.
 #'
 #' @inherit pbf01 return
 #'

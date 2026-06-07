@@ -1,6 +1,13 @@
 library(tinytest)
 library(bfpwr)
 
+source("helper-extended-tests.R", local = TRUE)
+if (!bfpwr_run_extended_tests()) {
+    exit_file(bfpwr_extended_skip_message(
+        "paper fixed-design formula checks are extended"
+    ))
+}
+
 ## Checks for values printed in paper/bfssd.Rnw. Each example calls the
 ## package function and compares the rounded or integer result to the
 ## manuscript value.
@@ -68,6 +75,16 @@ expect_equal(
                       dpm = 0.5, dpsd = c(0, 0.1))),
     c(143, 195),
     info = "one-sided JZS t-test sample sizes match the manuscript"
+)
+
+expect_equal(
+    as.numeric(ntbf01(k = 6, power = 0.95, null = 0,
+                      plocation = 0, pscale = 1/sqrt(2), pdf = 1,
+                      alternative = "greater", type = "two.sample",
+                      dpm = 0, dpsd = 0, lower.tail = FALSE,
+                      nrange = c(2, 10000))),
+    4920,
+    info = "one-sided JZS true-null t-test sample size remains stable"
 )
 
 ## Normal-moment example: "normal-moment-example".

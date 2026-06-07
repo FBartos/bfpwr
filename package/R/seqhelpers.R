@@ -102,45 +102,90 @@ intstages <- function(intregions, mean, sigma, method = "lpmvnorm", ...) {
     }
 
     for (i in seq_len(m)) {
-        stageregions <- intregions[[i]]
-        stopifnot(is.list(stageregions))
-
-        regionprobs <- vapply(stageregions,
-                              FUN.VALUE = numeric(1),
-                              FUN = function(region) {
-            ## NaN encodes that critical value doesn't exist => probability = 0
-            if (any(is.nan(region))) {
-                p <- 0
-            } else {
-                if (i == 1) {
-                    p <- exp(.bfpwr_lpnorm_interval(lower = region[1,],
-                                                    upper = region[2,],
-                                                    mean = mean[1],
-                                                    sd = sqrt(sigma[1:1])))
-                } else if (method == "lpmvnorm") {
-                    p <- exp(mvtnorm::lpmvnorm(lower = region[1, ],
-                                               upper = region[2, ],
-                                               mean = mean[1:i],
-                                               chol = Ct[,1:i],
-                                               M = ngrid,
-                                               w = w[1:(i - 1),,drop = FALSE],
-                                               ...))
-                } else {
-                    p <- mvtnorm::pmvnorm(lower = region[1, ],
-                                          upper = region[2, ],
-                                          mean  = mean[1:i],
-                                          sigma = sigma[1:i, 1:i],
-                                          seed = 42,
-                                          keepAttr = FALSE,
-                                          ...)
-                }
-            }
-            return(p)
-        })
-        probs[i] <- sum(regionprobs, na.rm = TRUE)
+        if (i > 1 && method == "lpmvnorm") {
+            probs[i] <- .bfseq_intstage_sum(
+                stageregions = intregions[[i]], mean = mean[1:i],
+                sigma = sigma[1:i, 1:i], method = method,
+                cholFactor = Ct[,1:i], w = w[1:(i - 1),,drop = FALSE],
+                ngrid = ngrid, ...
+            )
+        } else {
+            probs[i] <- .bfseq_intstage_sum(
+                stageregions = intregions[[i]], mean = mean[1:i],
+                sigma = sigma[1:i, 1:i], method = method, ...
+            )
+        }
     }
 
     return(probs)
+}
+
+.bfseq_intstage <- function(stageregions, mean, sigma, method = "lpmvnorm",
+                            ...) {
+    stopifnot(
+        is.list(stageregions),
+        is.numeric(mean),
+        is.matrix(sigma),
+        length(mean) == nrow(sigma),
+        nrow(sigma) == ncol(sigma)
+    )
+
+    i <- length(mean)
+    if (i > 1 && method == "lpmvnorm") {
+        C <- t(chol(sigma))
+        Ct <- mvtnorm::ltMatrices(C[lower.tri(C, diag = TRUE)], diag = TRUE)
+        ngrid <- 1000
+        w <- withr::with_seed(seed = 42, code = {
+            t(qrng::ghalton(n = ngrid, d = i - 1))
+        })
+        return(.bfseq_intstage_sum(stageregions = stageregions,
+                                   mean = mean, sigma = sigma,
+                                   method = method, cholFactor = Ct,
+                                   w = w, ngrid = ngrid, ...))
+    }
+
+    .bfseq_intstage_sum(stageregions = stageregions, mean = mean,
+                        sigma = sigma, method = method, ...)
+}
+
+.bfseq_intstage_sum <- function(stageregions, mean, sigma,
+                                method = "lpmvnorm", cholFactor = NULL,
+                                w = NULL, ngrid = 1000, ...) {
+    stopifnot(is.list(stageregions))
+
+    i <- length(mean)
+    regionprobs <- vapply(stageregions,
+                          FUN.VALUE = numeric(1),
+                          FUN = function(region) {
+        ## NaN encodes that a boundary does not exist, so the region is empty.
+        if (any(is.nan(region))) {
+            p <- 0
+        } else if (i == 1) {
+            p <- exp(.bfpwr_lpnorm_interval(lower = region[1,],
+                                            upper = region[2,],
+                                            mean = mean[1],
+                                            sd = sqrt(sigma[1:1])))
+        } else if (method == "lpmvnorm") {
+            p <- exp(mvtnorm::lpmvnorm(lower = region[1, ],
+                                       upper = region[2, ],
+                                       mean = mean,
+                                       chol = cholFactor,
+                                       M = ngrid,
+                                       w = w,
+                                       ...))
+        } else {
+            p <- mvtnorm::pmvnorm(lower = region[1, ],
+                                  upper = region[2, ],
+                                  mean  = mean,
+                                  sigma = sigma,
+                                  seed = 42,
+                                  keepAttr = FALSE,
+                                  ...)
+        }
+        return(p)
+    })
+
+    sum(regionprobs, na.rm = TRUE)
 }
 
 
@@ -178,65 +223,81 @@ genregions1 <- function(zcrit0, zcrit1) {
               all(is.numeric(zcrit1)),
               length(zcrit0) == length(zcrit1))
 
+    m <- length(zcrit1)
+    direction <- .bfseq_one_critical_direction(zcrit0 = zcrit0,
+                                               zcrit1 = zcrit1)
+    stages <- lapply(seq_len(m), function(i) {
+        .bfseq_genregions1_stage(zcrit0 = zcrit0[seq_len(i)],
+                                 zcrit1 = zcrit1[seq_len(i)],
+                                 direction = direction)
+    })
+
+    return(list(H1 = lapply(stages, `[[`, "H1"),
+                H0 = lapply(stages, `[[`, "H0")))
+}
+
+.bfseq_one_critical_direction <- function(zcrit0, zcrit1) {
     H0nan <- is.nan(zcrit0)
     finite <- !H0nan & !is.nan(zcrit1)
     finiteH1 <- !is.nan(zcrit1)
     if (any(finite) && all(zcrit1[finite] >= zcrit0[finite])) {
-        direction <- "positive"
-    } else if (any(finite) && all(zcrit1[finite] < zcrit0[finite])) {
-        direction <- "negative"
-    } else if (!any(finite) && any(finiteH1) && all(zcrit1[finiteH1] >= 0)) {
-        direction <- "positive"
-    } else if (!any(finite) && any(finiteH1) && all(zcrit1[finiteH1] <= 0)) {
-        direction <- "negative"
-    } else {
-        stop("Inconsistent critical values: direction cannot be inferred.")
+        return("positive")
     }
+    if (any(finite) && all(zcrit1[finite] < zcrit0[finite])) {
+        return("negative")
+    }
+    if (!any(finite) && any(finiteH1) && all(zcrit1[finiteH1] >= 0)) {
+        return("positive")
+    }
+    if (!any(finite) && any(finiteH1) && all(zcrit1[finiteH1] <= 0)) {
+        return("negative")
+    }
+    stop("Inconsistent critical values: direction cannot be inferred.")
+}
 
-    m <- length(zcrit1)
-    intregionsH1 <- vector("list", m)
-    intregionsH0 <- vector("list", m)
+.bfseq_genregions1_stage <- function(zcrit0, zcrit1, direction = NULL) {
+    stopifnot(all(is.numeric(zcrit0)),
+              all(is.numeric(zcrit1)),
+              length(zcrit0) == length(zcrit1))
 
-    for (i in seq_len(m)) {
-        ## region where evidence for H1 in stage i
-        matH1 <- matrix(nrow = 2, ncol = i)
-        for (j in seq_len(i)) {
-            if (i == j) {
-                ## evidence for H1
-                if (direction == "positive") {
-                    lower <- zcrit1[j]
-                    upper <- Inf
-                } else {
-                    lower <- -Inf
-                    upper <- zcrit1[j]
-                }
+    if (is.null(direction)) {
+        direction <- .bfseq_one_critical_direction(zcrit0 = zcrit0,
+                                                   zcrit1 = zcrit1)
+    }
+    H0nan <- is.nan(zcrit0)
+    i <- length(zcrit1)
+    matH1 <- matrix(nrow = 2, ncol = i)
+    for (j in seq_len(i)) {
+        if (i == j) {
+            if (direction == "positive") {
+                lower <- zcrit1[j]
+                upper <- Inf
             } else {
-                ## continue (no stop yet)
-                if (direction == "positive") {
-                    if (H0nan[j]) lower <- -Inf
-                    else lower <- zcrit0[j]
-                    upper <- zcrit1[j]
-                } else {
-                    lower <- zcrit1[j]
-                    if (H0nan[j]) upper <- Inf
-                    else upper <- zcrit0[j]
-                }
+                lower <- -Inf
+                upper <- zcrit1[j]
             }
-            matH1[, j] <- c(lower, upper)
-        }
-        intregionsH1[[i]] <- list(matH1)
-
-        ## region where evidence for H0 in stage i
-        matH0 <- matH1
-        if (direction == "positive") {
-            matH0[, i] <- c(-Inf, zcrit0[i])
         } else {
-            matH0[, i] <- c(zcrit0[i], Inf)
+            if (direction == "positive") {
+                if (H0nan[j]) lower <- -Inf
+                else lower <- zcrit0[j]
+                upper <- zcrit1[j]
+            } else {
+                lower <- zcrit1[j]
+                if (H0nan[j]) upper <- Inf
+                else upper <- zcrit0[j]
+            }
         }
-        intregionsH0[[i]] <- list(matH0)
+        matH1[, j] <- c(lower, upper)
     }
 
-    return(list(H1 = intregionsH1, H0 = intregionsH0))
+    matH0 <- matH1
+    if (direction == "positive") {
+        matH0[, i] <- c(-Inf, zcrit0[i])
+    } else {
+        matH0[, i] <- c(zcrit0[i], Inf)
+    }
+
+    list(H1 = list(matH1), H0 = list(matH0))
 }
 
 
@@ -253,7 +314,7 @@ genregions1 <- function(zcrit0, zcrit1) {
 #'     upper bound for H0. Specify NaN if no H0 boundary exists at a stage
 #' @param zcrit1 2 x m numeric matrix of H1 boundaries. Each column corresponds
 #'     to one stage. The first row gives the upper bound of the lower region
-#'     (extending from -Inf to this upper boudn) and the second row the lower
+#'     (extending from -Inf to this upper bound) and the second row the lower
 #'     bound of the upper region for H1 (extending from this lower bound to Inf)
 #' @param strict Logical. If \code{TRUE}, return all possible region
 #'     combinations (slow but exact). If \code{FALSE}, only returns the main
@@ -298,73 +359,102 @@ genregions2 <- function(zcrit0, zcrit1, strict = FALSE) {
     ## }
 
     m <- ncol(zcrit0)
-    intregionsH1 <- vector("list", m)
-    intregionsH0 <- vector("list", m)
+    stages <- lapply(seq_len(m), function(i) {
+        .bfseq_genregions2_stage(zcrit0 = zcrit0[, seq_len(i), drop = FALSE],
+                                 zcrit1 = zcrit1[, seq_len(i), drop = FALSE],
+                                 strict = strict)
+    })
 
-    ## identify stages where evidence for H0 impossible
+    list(H1 = lapply(stages, `[[`, "H1"),
+         H0 = lapply(stages, `[[`, "H0"))
+}
+
+.bfseq_genregions2_stage <- function(zcrit0, zcrit1, strict = FALSE) {
+    stopifnot(
+        is.matrix(zcrit0),
+        is.matrix(zcrit1),
+        all(dim(zcrit0) == dim(zcrit1)),
+        nrow(zcrit0) == 2
+    )
+
+    i <- ncol(zcrit0)
     H0nan <- apply(zcrit0, 2, function(x) any(is.nan(x)))
 
-    for (i in seq_len(m)) {
-        ## build stage-wise regions
-        H1i <- lapply(seq_len(i), function(j) {
-            if (i == j) {
-                ## stopping regions (evidence for H1)
-                list(
-                    c(-Inf, zcrit1[1, j]), # lower
-                    c(zcrit1[2, j], Inf)   # upper
-                )
-            } else {
-                ## continuation regions (no evidence for H1 or H0)
-                if (H0nan[j] == TRUE) {
-                    list(c(zcrit1[1, j], zcrit1[2, j]))
-                } else {
-                    list(
-                        ## between H1 lower and H0 lower
-                        c(zcrit1[1, j], zcrit0[1, j]),
-                        ## between H0 upper and H1 upper
-                        c(zcrit0[2, j], zcrit1[2, j])
-                    )
-                }
-            }
-        })
-
-        H0i <- H1i
-        H0i[[i]] <- list(c(zcrit0[1, i], zcrit0[2, i])) # H0 stop region
-
-       ## build all region combinations
-        if (strict == TRUE) {
-            combosH1i <- expand.grid(lapply(H1i, seq_along))
-            combosH0i <- expand.grid(lapply(H0i, seq_along))
+    H1i <- lapply(seq_len(i), function(j) {
+        if (i == j) {
+            list(
+                c(-Inf, zcrit1[1, j]),
+                c(zcrit1[2, j], Inf)
+            )
         } else {
-            ## integrating all regions is usually not worth it because the
-            ## probability of regions where the sign of z_i flips is almost
-            ## zero), hence, only take the two regions where the sign of z_i
-            ## doesn't flip (the first and last)
-            combosH1i <- rbind(rep(1, length(H1i)),
-                               sapply(H1i, length))
-            if (i <= 1 + sum(H0nan)) {
-                ## only one H0 region in the first non-NaN stage
-                combosH0i <- matrix(rep(1, length(H0i)), nrow = 1)
+            if (H0nan[j] == TRUE) {
+                list(c(zcrit1[1, j], zcrit1[2, j]))
             } else {
-                combosH0i <- rbind(rep(1, length(H0i)),
-                                   sapply(H0i, length))
+                list(
+                    c(zcrit1[1, j], zcrit0[1, j]),
+                    c(zcrit0[2, j], zcrit1[2, j])
+                )
             }
         }
+    })
 
-        makeregions <- function(combos, Hi) {
-            apply(combos, 1, function(row) {
-                sapply(seq_along(row), function(j) {
-                    region_index <- as.numeric(row[[j]])
-                    Hi[[j]][[region_index]]
-                })
-            }, simplify = FALSE)
+    H0i <- H1i
+    H0i[[i]] <- list(c(zcrit0[1, i], zcrit0[2, i]))
+
+    if (strict == TRUE) {
+        combosH1i <- expand.grid(lapply(H1i, seq_along))
+        combosH0i <- expand.grid(lapply(H0i, seq_along))
+    } else {
+        combosH1i <- rbind(rep(1, length(H1i)), sapply(H1i, length))
+        if (i <= 1 + sum(H0nan)) {
+            combosH0i <- matrix(rep(1, length(H0i)), nrow = 1)
+        } else {
+            combosH0i <- rbind(rep(1, length(H0i)), sapply(H0i, length))
         }
-
-        intregionsH1[[i]] <- makeregions(combosH1i, H1i)
-        intregionsH0[[i]] <- makeregions(combosH0i, H0i)
     }
 
-    list(H1 = intregionsH1, H0 = intregionsH0)
+    makeregions <- function(combos, Hi) {
+        apply(combos, 1, function(row) {
+            sapply(seq_along(row), function(j) {
+                region_index <- as.numeric(row[[j]])
+                Hi[[j]][[region_index]]
+            })
+        }, simplify = FALSE)
+    }
+
+    list(H1 = makeregions(combosH1i, H1i),
+         H0 = makeregions(combosH0i, H0i))
+}
+
+.count_strict_two_sided_regions <- function(zcrit0) {
+    stopifnot(
+        is.matrix(zcrit0),
+        nrow(zcrit0) == 2
+    )
+
+    m <- ncol(zcrit0)
+    H0nan <- apply(zcrit0, 2, function(x) any(is.nan(x)))
+    H1 <- H0 <- numeric(m)
+    finiteH0 <- 0L
+
+    for (i in seq_len(m)) {
+        ## Previous finite H0 boundaries split the continuation region into
+        ## lower and upper paths; strict = TRUE integrates all combinations.
+        npaths <- 2^finiteH0
+        H1[i] <- 2*npaths
+        H0[i] <- if (H0nan[i]) 0 else npaths
+
+        if (!H0nan[i]) {
+            finiteH0 <- finiteH0 + 1L
+        }
+    }
+
+    list(
+        total = sum(H1 + H0),
+        perStage = H1 + H0,
+        H0nan = H0nan,
+        firstH0 = match(FALSE, H0nan)
+    )
 }
 
 #' @title Compute Critical Z-Values for Bayes Factors
@@ -449,6 +539,267 @@ zcrit <- function(k, se, mu = NULL, tau, type = c("normal", "directional", "mome
 
 
 
+.bfpwr_root_value <- function(f, x) {
+    ans <- try(suppressWarnings(f(x)), silent = TRUE)
+    if (inherits(ans, "try-error") || length(ans) != 1 ||
+        !is.numeric(ans) || !is.finite(ans)) {
+        return(NaN)
+    }
+    ans
+}
+
+.bfpwr_certified_root <- function(f, x0, x1, f0 = NaN, f1 = NaN, ...) {
+    if (x0 == x1) {
+        return(structure("degenerate root interval", class = "try-error"))
+    }
+
+    if (!is.finite(f0)) {
+        f0 <- .bfpwr_root_value(f = f, x = x0)
+    }
+    if (!is.finite(f1)) {
+        f1 <- .bfpwr_root_value(f = f, x = x1)
+    }
+    if (!is.finite(f0) || !is.finite(f1) || f0*f1 > 0) {
+        return(structure("root not bracketed", class = "try-error"))
+    }
+    if (f0 == 0) return(x0)
+    if (f1 == 0) return(x1)
+
+    try(stats::uniroot(f = f, interval = sort(c(x0, x1)),
+                       extendInt = "no", ...)$root,
+        silent = TRUE)
+}
+
+.bfpwr_integrate_dots <- function(dots, rel.tol.default = NULL) {
+    if (length(dots) == 0) {
+        out <- list()
+    } else {
+        dot_names <- names(dots)
+        if (is.null(dot_names)) {
+            out <- list()
+        } else {
+            integrate_names <- c("subdivisions", "rel.tol", "abs.tol",
+                                 "stop.on.error", "keep.xy")
+            keep <- nzchar(dot_names) & dot_names %in% integrate_names
+            out <- dots[keep]
+        }
+    }
+    if (!is.null(rel.tol.default) && !("rel.tol" %in% names(out))) {
+        out$rel.tol <- rel.tol.default
+    }
+    out
+}
+
+.bfpwr_uniroot_dots <- function(dots) {
+    if (length(dots) == 0) {
+        return(list())
+    }
+    dot_names <- names(dots)
+    if (is.null(dot_names)) {
+        return(list())
+    }
+    keep_names <- c("tol", "maxiter", "trace", "check.conv")
+    keep <- nzchar(dot_names) & dot_names %in% keep_names
+    dots[keep]
+}
+
+.bfpwr_residual_certified_root <- function(scout_fun, certify_fun, x0, x1,
+                                           tolerance = 1e-5, ...) {
+    root <- try(stats::uniroot(f = scout_fun, interval = sort(c(x0, x1)),
+                               extendInt = "no", ...)$root,
+                silent = TRUE)
+    if (inherits(root, "try-error") || !is.numeric(root) ||
+        length(root) != 1 || !is.finite(root)) {
+        return(structure("scout root failed", class = "try-error"))
+    }
+
+    residual <- .bfpwr_root_value(f = certify_fun, x = root)
+    if (is.finite(residual) && abs(residual) <= tolerance) {
+        return(root)
+    }
+
+    structure("scout root not certified", class = "try-error")
+}
+
+## One-sided adaptive boundary search. The fast scout function is used only to
+## locate candidate brackets; returned roots must be certified by certify_fun.
+## The return value is a list with root and search_limit_reached.
+.bfpwr_one_sided_adaptive_root <- function(certify_fun, scout_fun, alternative,
+                                           origin = 0, step_scale = 1,
+                                           try_opposite = TRUE,
+                                           search_limit = 256,
+                                           steps = c(0.1, 0.25, 0.5, 1, 1.5,
+                                                     2, 2.5, 3, 3.5),
+                                           tail_steps = c(4, 8, 16, 32, 64,
+                                                          128, 256),
+                                           scout_tail_steps = c(4, 5, 6, 7, 8,
+                                                                16, 32, 64,
+                                                                128, 256),
+                                           scout_tolerance = 1e-5,
+                                           ...) {
+    f_origin <- .bfpwr_root_value(f = certify_fun, x = origin)
+    if (!is.finite(f_origin)) {
+        return(list(
+            root = structure("non-finite root start", class = "try-error"),
+            search_limit_reached = FALSE
+        ))
+    }
+    if (f_origin == 0) {
+        return(list(root = origin, search_limit_reached = FALSE))
+    }
+
+    direction <- if (alternative == "greater") {
+        if (f_origin > 0) 1 else -1
+    } else {
+        if (f_origin > 0) -1 else 1
+    }
+    directions <- if (try_opposite) c(direction, -direction) else direction
+    scan_steps <- sort(unique(c(steps, scout_tail_steps)))
+    scan_steps <- scan_steps[is.finite(scan_steps) & scan_steps > 0 &
+                             scan_steps <= search_limit]
+    if (!search_limit %in% scan_steps) {
+        scan_steps <- sort(c(scan_steps, search_limit))
+    }
+    tail_steps <- sort(unique(c(tail_steps, search_limit)))
+    tail_steps <- tail_steps[is.finite(tail_steps) & tail_steps > 0 &
+                             tail_steps <= search_limit]
+
+    search_limit_reached <- FALSE
+    for (direction in directions) {
+        last_finite_step <- 0
+        last_finite_x <- origin
+        finite_x <- numeric(0)
+        scout_prev_x <- origin
+        scout_prev_f <- f_origin
+
+        ## First use the fast direct integral only as a scout. A finite scout
+        ## sign change is never returned unless the stable BF path certifies it.
+        for (step in scan_steps) {
+            x1 <- origin + direction*step_scale*step
+            f1 <- .bfpwr_root_value(f = scout_fun, x = x1)
+            if (!is.finite(f1)) {
+                break
+            }
+            if (is.finite(scout_prev_f) && scout_prev_f*f1 <= 0) {
+                root <- .bfpwr_residual_certified_root(
+                    scout_fun = scout_fun, certify_fun = certify_fun,
+                    x0 = scout_prev_x, x1 = x1,
+                    tolerance = scout_tolerance, ...
+                )
+                if (!inherits(root, "try-error")) {
+                    return(list(root = root, search_limit_reached = FALSE))
+                }
+                root <- .bfpwr_certified_root(
+                    f = certify_fun, x0 = scout_prev_x, x1 = x1, ...
+                )
+                if (!inherits(root, "try-error")) {
+                    return(list(root = root, search_limit_reached = FALSE))
+                }
+            }
+            scout_prev_x <- x1
+            scout_prev_f <- f1
+            last_finite_step <- step
+            last_finite_x <- x1
+            finite_x <- c(finite_x, x1)
+        }
+
+        fprev <- f_origin
+        xprev <- origin
+        if (last_finite_step > 0) {
+            f_last <- .bfpwr_root_value(f = certify_fun, x = last_finite_x)
+            if (is.finite(f_last) && f_origin*f_last <= 0) {
+                x_bracket0 <- origin
+                f_bracket0 <- f_origin
+                x_bracket1 <- last_finite_x
+                f_bracket1 <- f_last
+                if (length(finite_x) > 1) {
+                    for (x_candidate in rev(finite_x[-length(finite_x)])) {
+                        f_candidate <- .bfpwr_root_value(f = certify_fun,
+                                                         x = x_candidate)
+                        if (!is.finite(f_candidate)) {
+                            next
+                        }
+                        if (f_candidate*f_bracket1 <= 0) {
+                            x_bracket0 <- x_candidate
+                            f_bracket0 <- f_candidate
+                            break
+                        }
+                        x_bracket1 <- x_candidate
+                        f_bracket1 <- f_candidate
+                    }
+                }
+                root <- .bfpwr_certified_root(
+                    f = certify_fun, x0 = x_bracket0, x1 = x_bracket1,
+                    f0 = f_bracket0, f1 = f_bracket1, ...
+                )
+                if (!inherits(root, "try-error")) {
+                    return(list(root = root, search_limit_reached = FALSE))
+                }
+            }
+            if (is.finite(f_last)) {
+                fprev <- f_last
+                xprev <- last_finite_x
+            }
+        }
+        if (last_finite_step >= search_limit) {
+            search_limit_reached <- TRUE
+            next
+        }
+
+        direction_limit_reached <- FALSE
+        exact_steps <- tail_steps[tail_steps > last_finite_step]
+        f_limit <- NaN
+        limit_checked <- FALSE
+        limit_ruled_out <- FALSE
+        for (step in exact_steps) {
+            x1 <- origin + direction*step_scale*step
+            f1 <- if (step >= search_limit && is.finite(f_limit)) {
+                f_limit
+            } else {
+                .bfpwr_root_value(f = certify_fun, x = x1)
+            }
+            if (is.finite(f1) && fprev*f1 <= 0) {
+                root <- .bfpwr_certified_root(
+                    f = certify_fun, x0 = xprev, x1 = x1, f0 = fprev,
+                    f1 = f1, ...
+                )
+                if (!inherits(root, "try-error")) {
+                    return(list(root = root, search_limit_reached = FALSE))
+                }
+            }
+            if (is.finite(f1)) {
+                xprev <- x1
+                fprev <- f1
+            }
+            direction_limit_reached <- step >= search_limit
+            ## If the exact path is still far from the threshold, check the
+            ## finite search limit before walking every tail step. Near-root
+            ## cases continue locally instead of jumping to the search limit.
+            if (!limit_checked && step < search_limit && is.finite(fprev) &&
+                abs(fprev) > 0.1) {
+                x_limit <- origin + direction*step_scale*search_limit
+                f_limit <- .bfpwr_root_value(f = certify_fun, x = x_limit)
+                limit_checked <- TRUE
+                direction_limit_reached <- TRUE
+                if (is.finite(f_limit) && fprev*f_limit > 0) {
+                    limit_ruled_out <- TRUE
+                    break
+                }
+            }
+        }
+        if (limit_ruled_out) {
+            search_limit_reached <- TRUE
+            next
+        }
+
+        search_limit_reached <- search_limit_reached || direction_limit_reached
+    }
+
+    list(root = structure("root not bracketed", class = "try-error"),
+         search_limit_reached = search_limit_reached)
+}
+
+
 #' @title Compute Critical T-Values for T-Test Bayes Factors
 #'
 #' @description Computes critical t-values for T-Test Bayes factors
@@ -465,11 +816,16 @@ zcrit <- function(k, se, mu = NULL, tau, type = c("normal", "directional", "mome
 #' @param alternative Direction of the test. Can be either \code{"two.sided"},
 #'     \code{"less"}, or \code{"greater"}. The latter two truncate the analysis
 #'     prior to negative and positive effects, respectively
-#' @param drange Numerical search strategy. Can be either \code{"adaptive"}
+#' @param trange Numerical search strategy. Can be either \code{"adaptive"}
 #'     (default) or an interval. For one-sided adaptive searches, roots are
 #'     bracketed up to \code{|t| <= 256}; pass a wider numeric interval to
 #'     search farther.
-#' @param ... Other arguments passed to \code{stats::uniroot}
+#' @param ... Optional numerical controls. For numeric ranges and two-sided
+#'     adaptive searches, arguments are passed to \code{stats::uniroot}. In
+#'     adaptive one-sided searches, \code{subdivisions}, \code{rel.tol},
+#'     \code{abs.tol}, \code{stop.on.error}, and \code{keep.xy} are used for BF
+#'     integration, while \code{tol}, \code{maxiter}, \code{trace}, and
+#'     \code{check.conv} are passed to \code{stats::uniroot}.
 #'
 #' @return Numeric vector of critical t-value(s)
 #'
@@ -508,23 +864,42 @@ zcrit <- function(k, se, mu = NULL, tau, type = c("normal", "directional", "mome
 #'
 #' @keywords internal
 tcrit <- function(k, n1, n2, plocation, pscale, pdf, type, alternative,
-                  drange = "adaptive", ...) {
+                  trange = "adaptive", ...) {
 
     ## determine t-statistic for which BF = k
+    dots <- list(...)
+    searchDots <- .bfpwr_integrate_dots(dots = dots,
+                                        rel.tol.default = 1e-2)
+    rootDots <- .bfpwr_uniroot_dots(dots = dots)
     rootFun <- function(t) {
         tbf01(t = t, n1 = n1, n2 = n2, plocation = plocation, pscale = pscale,
               pdf = pdf, type = type, alternative = alternative,
               log = TRUE) - log(k)
     }
-
-    ## Do not pre-optimize the BF surface for k > 1. The exact tbf01()
-    ## fallback used in wrong-tail cases can make a generic BFGS maximum search
-    ## much more expensive than the boundary search itself. Failed root searches
-    ## below still encode impossible boundaries as NaN.
+    rootFunSearch <- function(t) {
+        do.call(tbf01, c(list(
+            t = t, n1 = n1, n2 = n2, plocation = plocation, pscale = pscale,
+            pdf = pdf, type = type, alternative = alternative, log = TRUE
+        ), searchDots)) - log(k)
+    }
+    if (type == "two.sample") {
+        pars <- .tbf01_pars(n1 = n1, n2 = n2, type = type)
+    } else {
+        pars <- .tbf01_pars(n1 = n1, n2 = n1, type = type)
+    }
+    region <- .tbf01_prior_region(plocation = plocation, pscale = pscale,
+                                  pdf = pdf, alternative = alternative)
+    rootFunFast <- function(t) {
+        do.call(.tbf01_log_fast, c(list(
+            t = t, df = pars$df, neff = pars$neff,
+            plocation = plocation, pscale = pscale, pdf = pdf,
+            region = region
+        ), searchDots)) - log(k)
+    }
 
     if (alternative == "two.sided") {
         ## guess search range based on search range from z-test BF
-        if (!is.numeric(drange) && drange == "adaptive") {
+        if (!is.numeric(trange) && trange == "adaptive") {
             if (type == "two.sample") {
                 neff <- 1/(1/n1 + 1/n2)
             } else {
@@ -546,9 +921,26 @@ tcrit <- function(k, n1, n2, plocation, pscale, pdf, type, alternative,
                 searchIntUp <- c(meant, zcrit[1] + 2)
             }
         } else {
-            meant <- mean(drange)
-            searchIntLow <- c(drange[1], meant)
-            searchIntUp <- c(meant, drange[2])
+            meant <- mean(trange)
+            searchIntLow <- c(trange[1], meant)
+            searchIntUp <- c(meant, trange[2])
+        }
+        if (k > 1) {
+            ## Check impossible H0 boundaries only in the interval searched below.
+            ## This avoids unconstrained wrong-tail evaluations in tbf01().
+            maxInt <- c(searchIntLow[1], searchIntUp[2])
+            opt <- try(stats::optimize(f = function(t) {
+                                           ans <- suppressWarnings(rootFun(t))
+                                           if (is.finite(ans)) ans else -Inf
+                                       },
+                                       interval = maxInt,
+                                       maximum = TRUE),
+                       silent = TRUE)
+            if (!inherits(opt, "try-error") &&
+                is.finite(opt$objective) && opt$objective < 0) {
+                warning("maximum BF is less than k; BF01 = k impossible")
+                return(c(NaN, NaN))
+            }
         }
         ## search for critical values
         tcrit <- c(NaN, NaN)
@@ -564,52 +956,18 @@ tcrit <- function(k, n1, n2, plocation, pscale, pdf, type, alternative,
             tcrit <- c(lower, upper)
         }
     } else { # one-sided cases
-        if (!is.numeric(drange) && drange == "adaptive") {
+        search_limit_reached <- FALSE
+        if (!is.numeric(trange) && trange == "adaptive") {
             searchLimit <- 256
-            bracketRoot <- function(direction) {
-                steps <- c(0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128,
-                           searchLimit)
-                x0 <- 0
-                f0 <- suppressWarnings(rootFun(x0))
-                if (!is.finite(f0)) {
-                    return(structure("non-finite root start",
-                                     class = "try-error"))
-                }
-                for (step in steps) {
-                    x1 <- direction * step
-                    f1 <- suppressWarnings(rootFun(x1))
-                    if (is.finite(f1) && f0 * f1 <= 0) {
-                        interval <- sort(c(x0, x1))
-                        return(try(stats::uniroot(f = rootFun,
-                                                  interval = interval,
-                                                  extendInt = "no",
-                                                  ...)$root,
-                                   silent = TRUE))
-                    }
-                }
-                structure("adaptive search limit reached",
-                          class = c("bfpwr_tcrit_search_limit", "try-error"))
-            }
-
-            if (alternative == "greater" && k > 1) {
-                directions <- c(-1, 1)
-            } else if (alternative == "greater") {
-                directions <- c(1, -1)
-            } else if (k > 1) {
-                directions <- c(1, -1)
-            } else {
-                directions <- c(-1, 1)
-            }
-            res <- structure("root not bracketed", class = "try-error")
-            searchLimitReached <- FALSE
-            for (direction in directions) {
-                res <- bracketRoot(direction)
-                searchLimitReached <- searchLimitReached ||
-                    inherits(res, "bfpwr_tcrit_search_limit")
-                if (!inherits(res, "try-error")) break
-            }
+            search <- do.call(.bfpwr_one_sided_adaptive_root, c(list(
+                certify_fun = rootFunSearch, scout_fun = rootFunFast,
+                alternative = alternative, origin = 0, step_scale = 1,
+                try_opposite = TRUE, search_limit = searchLimit
+            ), rootDots))
+            res <- search$root
+            search_limit_reached <- search$search_limit_reached
         } else {
-            searchint <- drange
+            searchint <- trange
             extend <- "no"
 
             suppressWarnings({
@@ -619,13 +977,12 @@ tcrit <- function(k, n1, n2, plocation, pscale, pdf, type, alternative,
             })
         }
         if (inherits(res, "try-error")) {
-            if (exists("searchLimitReached", inherits = FALSE) &&
-                searchLimitReached) {
+            if (search_limit_reached) {
                 warning(paste0(
                     "Adaptive t critical-value search reached |t| <= ",
                     searchLimit,
                     " without bracketing BF01 = k; pass a wider numeric ",
-                    "'drange' interval to search for exact bounds beyond ",
+                    "'trange' interval to search for exact bounds beyond ",
                     "this limit."
                 ))
             } else {
