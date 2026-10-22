@@ -89,7 +89,7 @@ expect_true(n < 50)
 expect_true(tpower(n, -0.2, 0) >= 0.1 && tpower(n - 1, -0.2, 0) < 0.1)
 
 ## powerbf01seq() names the BF family 'bftype', not 'type'.
-for (bftype in c("directional", "moment")) {
+for (bftype in "directional") {
     expect_error(powerbf01seq(n = 30, pm = 0, psd = 1, dpm = 0.2, dpsd = 0,
                               bftype = bftype, alternative = "greater"),
                  pattern = "requires bftype = \"normal\"", fixed = TRUE)

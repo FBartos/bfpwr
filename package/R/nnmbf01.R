@@ -1,6 +1,6 @@
 nnmbf01. <- function(k, power, usd, null = 0, psd, dpm, dpsd,
                      nrange = c(1, 10^5), lower.tail = TRUE, integer = TRUE,
-                     ...) {
+                     alternative = c("two.sided", "less", "greater"), ...) {
     ## input checks
     stopifnot(
         length(k) == 1,
@@ -51,10 +51,12 @@ nnmbf01. <- function(k, power, usd, null = 0, psd, dpm, dpsd,
     )
 
 
+    alternative <- match.arg(alternative)
+
     ## define function for numerical root-finding
     rootFun <- function(n) {
         pnmbf01(k = k, n = n, usd = usd, null = null, psd = psd, dpm = dpm,
-                dpsd = dpsd, lower.tail = lower.tail) - power
+                dpsd = dpsd, lower.tail = lower.tail, alternative = alternative) - power
     }
 
     ## determine sample size numerically
@@ -95,4 +97,4 @@ nnmbf01. <- function(k, power, usd, null = 0, psd, dpm, dpsd,
 #' @export
 nnmbf01 <- Vectorize(FUN = nnmbf01.,
                      vectorize.args = c("k", "power", "usd", "null", "psd",
-                                        "dpm", "dpsd", "integer"))
+                                        "dpm", "dpsd", "integer", "alternative"))

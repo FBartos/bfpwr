@@ -6,7 +6,6 @@
 #'     inconclusive in a sequential design. Optionally, also computes the
 #'     expected sample size.
 #'
-#' @inheritParams bf01
 #' @param k1 Bayes factor threshold in favor of \eqn{H_1}{H1} (i.e.,
 #'     \eqn{\text{BF}_{01} \leq \code{k1} < 1}{BF01 < \code{k1} < 1} implies
 #'     evidence for \eqn{H_1})
@@ -36,8 +35,17 @@
 #'     centered around \code{null}
 #' }
 #'     One-sided \code{alternative} values are supported for
-#'     \code{type = "normal"} only; \code{type = "directional"} compares
+#'     \code{type = "normal"} and \code{type = "moment"};
+#'     \code{type = "directional"} compares
 #'     two composite hypotheses and retains its existing meaning.
+#'
+#' @param alternative Direction of the alternative hypothesis, one of
+#'     \code{"two.sided"} (default), \code{"less"}, or \code{"greater"}.
+#'     For normal and moment priors, one-sided alternatives truncate and
+#'     renormalize the analysis prior below or above \code{null}, respectively,
+#'     while retaining the point null hypothesis. Prior parameters describe
+#'     the distribution before truncation. A normal point prior
+#'     (\code{psd = 0}) must lie strictly on the specified side of \code{null}.
 #'
 #' @param strict Logical. If \code{TRUE} and there are more than two critical
 #'     values per stage, enumerate all possible region combinations. If
@@ -72,8 +80,8 @@
 #'     original parameter scale, matching
 #'     the fixed-sample z-test functions.
 #'     The normal design prior is not truncated, including for one-sided
-#'     analysis priors. One-sided normal Bayes factor boundaries are found
-#'     numerically using the same calculation as \code{\link{pbf01}}.
+#'     analysis priors. One-sided Bayes factor boundaries are found numerically
+#'     using the same calculation as \code{\link{pbf01}} or \code{\link{pnmbf01}}.
 #'
 #' @examples
 #' n <- seq(50, 200, 50) # sample size per stage
@@ -365,6 +373,8 @@ print.bfseqdesign <- function(x, digits = max(3L, getOption("digits") - 3L), ...
         aprior <- paste0("parameter|H1 ~ NM(location = ",
                          round(znull, digits = digits), ", scale = ",
                          round(x$psd, digits = digits), ")")
+        if (identical(x$alternative, "greater")) aprior <- paste0(aprior, "_+")
+        if (identical(x$alternative, "less")) aprior <- paste0(aprior, "_-")
     }
     cat(paste0("Analysis prior:   ", aprior, "\n"))
 

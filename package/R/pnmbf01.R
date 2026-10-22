@@ -1,4 +1,5 @@
-pnmbf01. <- function(k, n, usd, null = 0, psd, dpm, dpsd, lower.tail = TRUE) {
+pnmbf01. <- function(k, n, usd, null = 0, psd, dpm, dpsd, lower.tail = TRUE,
+                     alternative = c("two.sided", "less", "greater")) {
     ## input checks
     stopifnot(
         length(k) == 1,
@@ -39,8 +40,19 @@ pnmbf01. <- function(k, n, usd, null = 0, psd, dpm, dpsd, lower.tail = TRUE) {
         !is.na(lower.tail)
     )
 
+    alternative <- match.arg(alternative)
+
     ## variance of the data based on the design prior
     v <- usd^2/n + dpsd^2
+
+    if (alternative != "two.sided") {
+        se <- usd/sqrt(n)
+        critical <- zcrit(k = k, se = se, null = null, tau = psd,
+                          type = "moment", alternative = alternative)
+        Z <- (null - dpm + se*critical)/sqrt(v)
+        tail <- alternative == "less"
+        return(stats::pnorm(Z, lower.tail = if (lower.tail) tail else !tail))
+    }
 
     ## compute power with closed-form formula
     Y <- (2*lamW::lambertW0(x = (1 + n*psd^2/usd^2)^1.5*sqrt(exp(1))/2/k) - 1)*
@@ -76,6 +88,7 @@ pnmbf01. <- function(k, n, usd, null = 0, psd, dpm, dpsd, lower.tail = TRUE) {
 #'     moment prior Bayes factor (\link{nmbf01}) more extreme than a threshold
 #'     \code{k} with a specified sample size.
 #'
+#' @inheritParams nmbf01
 #' @inheritParams pbf01
 #' @param psd Spread of the normal moment prior assigned to the parameter under
 #'     the alternative in the analysis. The modes of the prior are located at
@@ -84,6 +97,9 @@ pnmbf01. <- function(k, n, usd, null = 0, psd, dpm, dpsd, lower.tail = TRUE) {
 #' @param dpsd Standard deviation of the normal design prior assigned to the
 #'     parameter. Set to 0 to obtain a point prior at the design prior mean
 #'
+#' @note The normal design prior is not truncated, including for one-sided
+#'     analysis priors. One-sided Bayes factor boundaries are found numerically
+#'     using the same calculation as \code{\link{pbf01seq}}.
 #' @inherit pbf01 details
 #'
 #' @inherit pbf01 return
