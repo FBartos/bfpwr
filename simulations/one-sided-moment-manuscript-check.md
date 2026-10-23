@@ -11,7 +11,7 @@ z=(\widehat\theta-\theta_0)/\sigma,\quad r=\tau/\sigma,
 \quad q=z/\sqrt{1+1/r^2},\quad A=(1+r^2)^{3/2}.
 $$
 
-Here `se` is $\sigma$, `psd` is the normal-kernel scale $\tau$, and `null` is $\theta_0$. Multiplying the Table 1 denominator by $e^{-q^2/2}$ gives
+Here `se` is $\sigma$, `psd` is the normal-kernel scale $\tau$, and `null` is $\theta_0$. Multiplying the Table 1 numerator and denominator by $e^{-q^2/2}$ gives
 
 $$
 \mathrm{BF}_{01}
@@ -33,11 +33,11 @@ Independent verification ([R script](scripts/verify_one_sided_moment_manuscript.
 
 | Check | Result |
 | --- | --- |
-| Table 1 and independent marginal integral versus `nmbf01` | 240 cases; maximum absolute log error 2.9e-13 for the printed expression and 2.6e-13 for the implementation |
+| Table 1 and independent marginal integral versus `nmbf01` | 240 grid rows (60 unique r,z pairs for the printed expression); maximum absolute log error 2.9e-13 for the printed expression and 2.6e-13 for the implementation |
 | Fixed-sample power versus independent boundaries/normal tails | 96 fixed-power and 48 one-look probabilities; maximum absolute error 1.8e-12 |
 | Two-look stopping probabilities and sample-size moments versus conditional-normal integration | 8 two-look designs, ngrid=50000: probability error <=1.6e-6; expected-size error <=5.3e-11; variance error <=2.1e-10 |
 
-Existing package validation also passes: 1,076 default assertions and `R CMD check --no-manual --ignore-vignettes` with Status OK. Extended tests and vignette/manual regeneration were not run. Prior independent reviews covered Sol, Opus, Sonnet and DeepSeek; Gemini was unavailable due to quota.
+Previously recorded package validation at dfc8343 (not rerun in this artifact-only batch): 1,076 default assertions pass, and `R CMD check --no-manual --ignore-vignettes` with Status OK. Extended tests and vignette/manual regeneration were not run. Prior independent reviews covered Sol, Opus, Sonnet and DeepSeek; Gemini was unavailable due to quota.
 
 One implementation limitation remains separate from the manuscript formulas. For `k=.1`, target power `.016`, `usd=1`, `psd=.3`, `dpm=dpsd=.03`, and `alternative="greater"`, `nnmbf01` returns **405**, although **18** already meets the target. The power curve is nonmonotone, so a root-finder does not guarantee the first crossing. The existing `nbf01seq(..., looks=1, search="exhaustive", nrange=c(2,1000), type="moment")` returns 18. Correcting the fixed-function guarantee versus adding a direct exhaustive mode is an unresolved maintainer choice; the PR is a draft for that reason. This is a search-policy limitation, not evidence against Table 1 or Eq. (3.1).
 
