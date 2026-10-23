@@ -28,8 +28,21 @@ nmbf01. <- function(estimate, se, null = 0, psd, log = FALSE,
     alternative <- match.arg(alternative)
     if (alternative != "two.sided") {
         direction <- if (alternative == "greater") 1 else -1
-        logbf <- .nmbf01_log_one_sided(z = direction*(estimate - null)/se,
-                                      se = se, psd = psd)
+        delta <- estimate - null
+        z <- direction*delta/se
+        if (!is.finite(delta)) z <- direction*(estimate/se - null/se)
+        log_abs_z <- NULL
+        if (!is.finite(z)) {
+            if (is.finite(delta)) {
+                log_abs_z <- log(abs(delta)) - log(se)
+            } else {
+                magnitude <- max(abs(estimate), abs(null))
+                log_abs_z <- log(abs(estimate/magnitude - null/magnitude)) +
+                    log(magnitude) - log(se)
+            }
+        }
+        logbf <- .nmbf01_log_one_sided(z = z, se = se, psd = psd,
+                                      log_abs_z = log_abs_z)
     } else {
         logbf <- 1.5*log(1 + psd^2/se^2) - 0.5*(estimate - null)^2/se^2/(1 + se^2/psd^2) -
             log(1 + (estimate - null)^2/se^2/(1 + se^2/psd^2))
@@ -43,7 +56,7 @@ nmbf01. <- function(estimate, se, null = 0, psd, log = FALSE,
 ## Point-null vs. positive normal moment prior, in standard-error units.
 ## With q = z*r/sqrt(1 + r^2), the half-line marginal involves
 ## I2(q) = integral_0^Inf t^2*exp(q*t - t^2/2) dt.
-.nmbf01_log_one_sided <- function(z, se, psd) {
+.nmbf01_log_one_sided <- function(z, se, psd, log_abs_z = NULL) {
     if (psd <= se) {
         r <- psd/se
         q <- z*r/sqrt(1 + r*r)
@@ -53,7 +66,17 @@ nmbf01. <- function(estimate, se, null = 0, psd, log = FALSE,
         q <- z/sqrt(1 + r*r)
         A <- 3*(log(psd) - log(se)) + 1.5*log1p(r*r)
     }
+    log_abs_q <- NULL
+    if (!is.null(log_abs_z) || (psd <= se && r < .Machine$double.xmin)) {
+        if (is.null(log_abs_z)) log_abs_z <- log(abs(z))
+        log_abs_q <- log_abs_z + min(log(psd) - log(se), 0) -
+            .5*log1p(r*r)
+        q <- sign(z)*exp(log_abs_q)
+    }
     if (q < -5) {
+        if (is.infinite(q) && !is.null(log_abs_q)) {
+            return(A + .5*log(2*pi) - 2*log(2) + 3*log_abs_q)
+        }
         ## The closed form subtracts nearly equal normal-tail terms here.
         ## For a = -q, backward recurrence gives R_j = I_j/I_(j-1) =
         ## j/(a + R_(j+1)), and I0 = 1/(a + R1). Fifty terms suffice for a > 5.
