@@ -78,7 +78,9 @@ for (alternative in c("greater", "less")) {
     nullDesign <- pbf01seq(k1 = 0.1, k0 = 3, se = usd/sqrt(n), n = n,
         null = 2, psd = psd, dpm = 2, dpsd = 0, type = "moment",
         alternative = alternative, ngrid = 17)
-    curves <- plot(nullDesign, plot = FALSE, zplot = TRUE)
+    curves <- plot(nullDesign, plot = FALSE)
+    expect_true(!is.null(curves$pDF1))
+    expect_true(!is.null(curves$pDF2))
     expect_equal(curves$pDF1, curves$pDF2)
 }
 
