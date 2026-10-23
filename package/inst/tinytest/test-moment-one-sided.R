@@ -129,7 +129,7 @@ expect_equal(plot(legacy, ngrid = 10, plot = FALSE),
 expect_equal(pnmbf01(0.1, 50, 1, psd = 1, dpm = 0.5, dpsd = 0),
              pnmbf01(0.1, 50, 1, psd = 1, dpm = 0.5, dpsd = 0,
                      alternative = "two.sided"))
-expect_error(nmbf01(0, 1, psd = 1, alternative = "invalid"))
+expect_error(nmbf01(0, 1, psd = 1, alternative = "invalid"), "should be one of")
 expect_error(pnmbf01(0.1, 50, 1, psd = 1, dpm = 0.5, dpsd = 0,
-                     alternative = "invalid"))
-expect_error(nmbf01(0, 1, psd = 0, alternative = "greater"))
+                     alternative = "invalid"), "should be one of")
+expect_error(nmbf01(0, 1, psd = 0, alternative = "greater"), "0 < psd")

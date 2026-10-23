@@ -120,7 +120,7 @@ wrapped <- powerbf01seq(power = 0.7, k0 = 3, psd = 0.7,
 expect_true(wrapped$solver$reached)
 expect_equal(wrapped$alternative, "greater")
 expect_error(pbf01seq(k1 = 0.1, se = 0.2, psd = 0, dpm = 0.5,
-                      type = "moment", alternative = "greater"))
+                      type = "moment", alternative = "greater"), "psd > 0")
 
 ## Moment priors are centered at the null; pm is ignored, as documented.
 expect_equal(pbf01seq(k1 = 0.1, se = c(0.3, 0.2), psd = 0.7,
