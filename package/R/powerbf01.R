@@ -258,6 +258,8 @@ print.power.bftest <- function(x, digits = getOption("digits"), ...) {
                            "BF threshold k")
         if (!is.null(x$alternative) && x$alternative != "two.sided") {
             printx$alternative <- x$alternative
+            note <- paste(note, "prior parameters are before truncation",
+                          sep = "\n      ")
         }
     } else if (x$test == "t") {
         printx <- x[c("n", "power", "sd", "null", "alternative", "plocation",

@@ -103,7 +103,9 @@ for (alternative in c("less", "greater")) {
     design <- powernmbf01(n = 50, psd = 0.7, dpm = direction*0.5, dpsd = 0,
                            alternative = alternative)
     expect_equal(design$alternative, alternative)
-    expect_true(any(grepl(alternative, capture.output(print(design)))))
+    printed <- capture.output(print(design))
+    expect_true(any(grepl(alternative, printed)))
+    expect_true(any(grepl("prior parameters are before truncation", printed, fixed = TRUE)))
     curves <- plot(design, ngrid = 10, plot = FALSE)
     for (target in c("H1", "H0")) {
         curve <- curves[[paste0("powDF", target)]]
