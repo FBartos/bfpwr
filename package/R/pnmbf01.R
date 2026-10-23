@@ -42,17 +42,21 @@ pnmbf01. <- function(k, n, usd, null = 0, psd, dpm, dpsd, lower.tail = TRUE,
 
     alternative <- match.arg(alternative)
 
-    ## variance of the data based on the design prior
-    v <- usd^2/n + dpsd^2
-
     if (alternative != "two.sided") {
         se <- usd/sqrt(n)
         critical <- zcrit(k = k, se = se, null = null, tau = psd,
                           type = "moment", alternative = alternative)
-        Z <- (null - dpm + se*critical)/sqrt(v)
+        scale <- max(se, dpsd)
+        seScaled <- se/scale
+        dpScaled <- dpsd/scale
+        Z <- ((null - dpm)/scale + seScaled*critical)/
+            sqrt(seScaled^2 + dpScaled^2)
         tail <- alternative == "less"
         return(stats::pnorm(Z, lower.tail = if (lower.tail) tail else !tail))
     }
+
+    ## variance of the data based on the design prior
+    v <- usd^2/n + dpsd^2
 
     ## compute power with closed-form formula
     Y <- (2*lamW::lambertW0(x = (1 + n*psd^2/usd^2)^1.5*sqrt(exp(1))/2/k) - 1)*
