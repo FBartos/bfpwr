@@ -30,12 +30,10 @@ nmbf01. <- function(estimate, se, null = 0, psd, log = FALSE,
         direction <- if (alternative == "greater") 1 else -1
         logbf <- .nmbf01_log_one_sided(z = direction*(estimate - null)/se,
                                       se = se, psd = psd)
-        if (log) return(logbf)
-        else return(exp(logbf))
+    } else {
+        logbf <- 1.5*log(1 + psd^2/se^2) - 0.5*(estimate - null)^2/se^2/(1 + se^2/psd^2) -
+            log(1 + (estimate - null)^2/se^2/(1 + se^2/psd^2))
     }
-
-    logbf <- 1.5*log(1 + psd^2/se^2) - 0.5*(estimate - null)^2/se^2/(1 + se^2/psd^2) -
-        log(1 + (estimate - null)^2/se^2/(1 + se^2/psd^2))
 
     if (log) return(logbf)
     else return(exp(logbf))

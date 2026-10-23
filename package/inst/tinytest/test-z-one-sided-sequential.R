@@ -129,11 +129,9 @@ for (alternative in c("less", "greater")) {
 }
 
 ## Directional composite hypotheses retain their existing meaning.
-for (type in "directional") {
-    expect_error(pbf01seq(k1 = 0.1, se = 0.2, pm = 0, psd = 1,
-        dpm = 0.5, type = type, alternative = "greater"), "normal analysis prior")
-    expect_error(nbf01seq(k1 = 0.1, power = 0.8, pm = 0, psd = 1,
-        dpm = 0.5, type = type, alternative = "greater"), "normal analysis prior")
-}
+expect_error(pbf01seq(k1 = 0.1, se = 0.2, pm = 0, psd = 1,
+    dpm = 0.5, type = "directional", alternative = "greater"), "normal analysis prior")
+expect_error(nbf01seq(k1 = 0.1, power = 0.8, pm = 0, psd = 1,
+    dpm = 0.5, type = "directional", alternative = "greater"), "normal analysis prior")
 expect_error(pbf01seq(k1 = 0.1, se = 0.2, pm = 0, psd = 0,
                       alternative = "greater"), "point prior")

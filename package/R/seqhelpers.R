@@ -614,12 +614,14 @@ zcrit <- function(k, se, null = 0, mu = NULL, tau,
     if (type %in% c("normal", "moment") && tau > 0 &&
         alternative != "two.sided") {
         direction <- if (alternative == "greater") 1 else -1
-        r <- tau/se
         logk <- log(k)
-        rootFun <- function(z) {
-            if (type == "moment") {
+        if (type == "moment") {
+            rootFun <- function(z) {
                 .nmbf01_log_one_sided(z, se = se, psd = tau) - logk
-            } else {
+            }
+        } else {
+            r <- tau/se
+            rootFun <- function(z) {
                 .bf01_log_one_sided(z, m = direction*mu/se, r = r) - logk
             }
         }
