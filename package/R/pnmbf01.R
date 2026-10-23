@@ -113,10 +113,10 @@ pnmbf01. <- function(k, n, usd, null = 0, psd, dpm, dpsd, lower.tail = TRUE,
 #' @seealso \link{nmbf01}, \link{nnmbf01}, \link{powernmbf01}
 #'
 #' @examples
-#' ## point desing prior (psd = 0)
+#' ## point design prior (dpsd = 0)
 #' pnmbf01(k = 1/10, n = 200, usd = 2, null = 0, psd = 0.5/sqrt(2), dpm = 0.5, dpsd = 0)
 #'
-#' ## normal design prior to incorporate parameter uncertainty (psd > 0)
+#' ## normal design prior to incorporate parameter uncertainty (dpsd > 0)
 #' pnmbf01(k = 1/10, n = 200, usd = 2, null = 0, psd = 0.5/sqrt(2), dpm = 0.5, dpsd = 0.25)
 #'
 #' ## design prior is the null hypothesis (dpm = 0, dpsd = 0)
