@@ -1,6 +1,7 @@
 nnmbf01. <- function(k, power, usd, null = 0, psd, dpm, dpsd,
                      nrange = c(1, 10^5), lower.tail = TRUE, integer = TRUE,
-                     alternative = c("two.sided", "less", "greater"), ...) {
+                     ...,
+                     alternative = c("two.sided", "less", "greater")) {
     ## input checks
     stopifnot(
         length(k) == 1,

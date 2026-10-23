@@ -15,8 +15,8 @@ nnmbf01(
   nrange = c(1, 10^5),
   lower.tail = TRUE,
   integer = TRUE,
-  alternative = c("two.sided", "less", "greater"),
-  ...
+  ...,
+  alternative = c("two.sided", "less", "greater")
 )
 }
 \arguments{
@@ -51,15 +51,15 @@ performed. Defaults to \code{c(1, 10^5)}}
 should be returned. If \code{TRUE} the required sample size is rounded to
 the next larger integer. Defaults to \code{TRUE}}
 
+\item{...}{Other arguments passed to \code{stats::uniroot}. The sample-size
+root tolerance defaults to \code{tol = 1e-8} and can be overridden.}
+
 \item{alternative}{Direction of the alternative hypothesis, one of
 \code{"two.sided"} (default), \code{"less"}, or \code{"greater"}.
 For a one-sided alternative, the normal moment analysis prior is
 restricted to values below \code{null} (\code{"less"}) or above
 \code{null} (\code{"greater"}) and renormalized. The point null
 hypothesis is unchanged; \code{psd} is the scale before truncation.}
-
-\item{...}{Other arguments passed to \code{stats::uniroot}. The sample-size
-root tolerance defaults to \code{tol = 1e-8} and can be overridden.}
 }
 \value{
 The required sample size to achieve the specified power
