@@ -29,7 +29,7 @@ nmbf01. <- function(estimate, se, null = 0, psd, log = FALSE,
     if (alternative != "two.sided") {
         direction <- if (alternative == "greater") 1 else -1
         logbf <- .nmbf01_log_one_sided(z = direction*(estimate - null)/se,
-                                      r = psd/se)
+                                      se = se, psd = psd)
         if (log) return(logbf)
         else return(exp(logbf))
     }
@@ -45,8 +45,16 @@ nmbf01. <- function(estimate, se, null = 0, psd, log = FALSE,
 ## Point-null vs. positive normal moment prior, in standard-error units.
 ## With q = z*r/sqrt(1 + r^2), the half-line marginal involves
 ## I2(q) = integral_0^Inf t^2*exp(q*t - t^2/2) dt.
-.nmbf01_log_one_sided <- function(z, r) {
-    q <- z/sqrt(1 + 1/r^2)
+.nmbf01_log_one_sided <- function(z, se, psd) {
+    if (psd <= se) {
+        r <- psd/se
+        q <- z*r/sqrt(1 + r*r)
+        A <- 1.5*log1p(r*r)
+    } else {
+        r <- se/psd
+        q <- z/sqrt(1 + r*r)
+        A <- 3*(log(psd) - log(se)) + 1.5*log1p(r*r)
+    }
     if (q < -5) {
         ## The closed form subtracts nearly equal normal-tail terms here.
         ## For a = -q, backward recurrence gives R_j = I_j/I_(j-1) =
@@ -57,17 +65,19 @@ nmbf01. <- function(estimate, se, null = 0, psd, log = FALSE,
             if (j == 2) ratio2 <- ratio
         }
         logIntegral <- log(ratio) + log(ratio2) - log(-q + ratio)
-        return(1.5*log1p(r^2) + log(2*pi)/2 - log(2) - logIntegral)
+        return(A + log(2*pi)/2 - log(2) - logIntegral)
     }
     if (abs(q) < 1e-5) {
         ## Preserve BF01 - 1 when a narrow prior makes q almost zero.
         phi0 <- stats::dnorm(0)
         logHalfMoment <- log1p(q*(4*phi0 + q*(1 + q*2*phi0/3)))
+    } else if (q > sqrt(.Machine$double.xmax)) {
+        logHalfMoment <- log(2) + 2*log(q)
     } else {
         halfMoment <- (1 + q^2)*stats::pnorm(q) + q*stats::dnorm(q)
-        logHalfMoment <- log(2*halfMoment)
+        logHalfMoment <- log(2) + log(halfMoment)
     }
-    1.5*log1p(r^2) - q^2/2 - logHalfMoment
+    A - (q/2)*q - logHalfMoment
 }
 
 

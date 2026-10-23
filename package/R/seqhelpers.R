@@ -618,7 +618,7 @@ zcrit <- function(k, se, null = 0, mu = NULL, tau,
         logk <- log(k)
         rootFun <- function(z) {
             if (type == "moment") {
-                .nmbf01_log_one_sided(z, r = r) - logk
+                .nmbf01_log_one_sided(z, se = se, psd = tau) - logk
             } else {
                 .bf01_log_one_sided(z, m = direction*mu/se, r = r) - logk
             }
