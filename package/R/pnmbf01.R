@@ -49,8 +49,10 @@ pnmbf01. <- function(k, n, usd, null = 0, psd, dpm, dpsd, lower.tail = TRUE,
         scale <- max(se, dpsd)
         seScaled <- se/scale
         dpScaled <- dpsd/scale
-        Z <- ((null - dpm)/scale + seScaled*critical)/
-            sqrt(seScaled^2 + dpScaled^2)
+        meanDiff <- null - dpm
+        meanScaled <- if (is.finite(meanDiff)) meanDiff/scale else
+            null/scale - dpm/scale
+        Z <- (meanScaled + seScaled*critical)/sqrt(seScaled^2 + dpScaled^2)
         tail <- alternative == "less"
         return(stats::pnorm(Z, lower.tail = if (lower.tail) tail else !tail))
     }

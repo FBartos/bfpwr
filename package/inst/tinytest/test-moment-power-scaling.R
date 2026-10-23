@@ -19,3 +19,18 @@ for (alternative in c("greater", "less")) {
         }
     }
 }
+
+## The mean difference may overflow before dividing by the measurement scale.
+for (alternative in c("greater", "less")) {
+    direction <- if (alternative == "greater") 1 else -1
+    for (scale in c(1, 1e308)) {
+        for (lower.tail in c(TRUE, FALSE)) {
+            reference <- pnorm(2/sqrt(1 + .2^2), lower.tail = !lower.tail)
+            actual <- pnmbf01(k = (1 + (.7/.2)^2)^1.5, n = 25,
+                usd = scale, null = direction*scale, psd = .7*scale,
+                dpm = -direction*scale, dpsd = scale,
+                alternative = alternative, lower.tail = lower.tail)
+            expect_equal(actual, reference, tolerance = 1e-10)
+        }
+    }
+}
