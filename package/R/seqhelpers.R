@@ -619,6 +619,22 @@ zcrit <- function(k, se, null = 0, mu = NULL, tau,
             rootFun <- function(z) {
                 .nmbf01_log_one_sided(z, se = se, psd = tau) - logk
             }
+            f0 <- rootFun(0)
+            if (f0 == 0) return(0)
+            side <- sign(f0)
+            bound <- side
+            fbound <- rootFun(bound)
+            while (sign(fbound) == sign(f0) && abs(bound) < .Machine$double.xmax) {
+                bound <- side*min(2*abs(bound), .Machine$double.xmax)
+                fbound <- rootFun(bound)
+            }
+            if (sign(fbound) == sign(f0)) {
+                stop("One-sided moment boundary exceeds the finite z range")
+            }
+            return(direction*stats::uniroot(rootFun, interval = sort(c(0, bound)),
+                f.lower = if (bound < 0) fbound else f0,
+                f.upper = if (bound < 0) f0 else fbound,
+                tol = .bf01_boundary_tol, maxiter = 1000)$root)
         } else {
             r <- tau/se
             rootFun <- function(z) {
