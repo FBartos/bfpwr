@@ -18,7 +18,8 @@
 #' @param null Parameter value under the point null hypothesis. Defaults to
 #'     \code{0}
 #' @param pm Analysis prior mean. Not taken into account for \code{type =
-#'     "moment"}
+#'     "moment"} for the analysis prior. If \code{dpm} is omitted, its
+#'     default remains \code{pm}, including for moment priors
 #' @param psd Analysis prior standard deviation (\code{type = "normal"} and
 #'     \code{type = "directional"}) or scale (\code{type = "moment"})
 #' @param dpm Mean of the normal design prior

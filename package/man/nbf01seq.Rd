@@ -45,7 +45,8 @@ estimate at \eqn{n = 1}{n = 1}.}
 \code{0}}
 
 \item{pm}{Analysis prior mean. Not taken into account for \code{type =
-"moment"}}
+"moment"} for the analysis prior. If \code{dpm} is omitted, its
+default remains \code{pm}, including for moment priors}
 
 \item{psd}{Analysis prior standard deviation (\code{type = "normal"} and
 \code{type = "directional"}) or scale (\code{type = "moment"})}
