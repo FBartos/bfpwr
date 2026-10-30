@@ -59,7 +59,9 @@ root tolerance defaults to \code{tol = 1e-8} and can be overridden.}
 For a one-sided alternative, the normal moment analysis prior is
 restricted to values below \code{null} (\code{"less"}) or above
 \code{null} (\code{"greater"}) and renormalized. The point null
-hypothesis is unchanged; \code{psd} is the scale before truncation.}
+hypothesis is unchanged; \code{psd} is the scale before truncation.
+Must be specified by name: unnamed arguments after \code{integer} are
+passed to \code{stats::uniroot}.}
 }
 \value{
 The required sample size to achieve the specified power

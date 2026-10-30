@@ -75,6 +75,14 @@ nnmbf01. <- function(k, power, usd, null = 0, psd, dpm, dpsd,
 #'
 #' @inheritParams pnmbf01
 #' @inheritParams nbf01
+#' @param alternative Direction of the alternative hypothesis, one of
+#'     \code{"two.sided"} (default), \code{"less"}, or \code{"greater"}.
+#'     For a one-sided alternative, the normal moment analysis prior is
+#'     restricted to values below \code{null} (\code{"less"}) or above
+#'     \code{null} (\code{"greater"}) and renormalized. The point null
+#'     hypothesis is unchanged; \code{psd} is the scale before truncation.
+#'     Must be specified by name: unnamed arguments after \code{integer} are
+#'     passed to \code{stats::uniroot}.
 #'
 #' @inherit pbf01 details
 #'

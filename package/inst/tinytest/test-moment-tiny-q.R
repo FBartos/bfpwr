@@ -11,12 +11,11 @@ for (alternative in c("greater", "less")) {
         reference <- 1.5*r^2 - 4*dnorm(0)*z*r
         expect_equal(actual/reference, 1, tolerance = 1e-6)
     }
-    r <- 5e-8
-    critical <- bfpwr:::zcrit(1, se = 1, tau = r, type = "moment",
+    rCritical <- 5e-8
+    critical <- bfpwr:::zcrit(1, se = 1, tau = rCritical, type = "moment",
                               alternative = alternative)
-    reference <- 1.5*r*sqrt(1 + r*r)/(4*dnorm(0))
+    reference <- 1.5*rCritical*sqrt(1 + rCritical^2)/(4*dnorm(0))
     expect_true(abs(direction*critical - reference) <= 2e-10)
-    r <- 1e-8
 }
 
 ## Independent quadrature checks both sides of the Taylor transition.

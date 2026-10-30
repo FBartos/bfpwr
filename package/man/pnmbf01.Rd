@@ -70,8 +70,10 @@ It is assumed that the standard error of the future parameter
 }
 \note{
 The normal design prior is not truncated, including for one-sided
-    analysis priors. One-sided Bayes factor boundaries are found numerically
-    using the same calculation as \code{\link{pbf01seq}}.
+    analysis priors. One-sided Bayes factor boundaries are found by
+    numerical root-finding on the one-sided log Bayes factor, which is
+    monotone in the estimate; \code{\link{pbf01seq}} uses the same
+    boundaries at each look.
 }
 \examples{
 ## point design prior (dpsd = 0)

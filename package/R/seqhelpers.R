@@ -622,7 +622,8 @@ zcrit <- function(k, se, null = 0, mu = NULL, tau,
             f0 <- rootFun(0)
             if (f0 == 0) return(0)
             side <- sign(f0)
-            bound <- side
+            ## Start near |q| = 1: for psd < se, z is about q*se/psd.
+            bound <- side*min(max(1, se/tau), .Machine$double.xmax)
             fbound <- rootFun(bound)
             while (sign(fbound) == sign(f0) && abs(bound) < .Machine$double.xmax) {
                 bound <- side*min(2*abs(bound), .Machine$double.xmax)
@@ -635,11 +636,11 @@ zcrit <- function(k, se, null = 0, mu = NULL, tau,
                 f.lower = if (bound < 0) fbound else f0,
                 f.upper = if (bound < 0) f0 else fbound,
                 tol = .bf01_boundary_tol, maxiter = 1000)$root)
-        } else {
-            r <- tau/se
-            rootFun <- function(z) {
-                .bf01_log_one_sided(z, m = direction*mu/se, r = r) - logk
-            }
+        }
+        m <- direction*mu/se
+        r <- tau/se
+        rootFun <- function(z) {
+            .bf01_log_one_sided(z, m = m, r = r) - logk
         }
         ## On the reflected scale BF01 decreases strictly from Inf to 0.
         return(direction*stats::uniroot(rootFun, interval = c(-1, 1),
