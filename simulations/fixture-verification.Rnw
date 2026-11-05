@@ -195,6 +195,19 @@ format_sequence <- function(x) {
     paste(min(x), "to", max(x), "by", steps[[1]])
 }
 
+draw_sparse_axis <- function(values, max_labels = 8L) {
+    positions <- seq_along(values)
+    if (length(values) <= max_labels) {
+        axis(1, at = positions, labels = values)
+        return(invisible(positions))
+    }
+    shown <- unique(pmax(1L, pmin(length(values),
+                                  round(seq(1, length(values),
+                                            length.out = max_labels)))))
+    axis(1, at = shown, labels = values[shown])
+    invisible(shown)
+}
+
 drop_empty_columns <- function(x) {
     if (ncol(x) == 0) return(x)
     keep <- vapply(x, function(col) {
@@ -941,10 +954,14 @@ pick_t_sequential_reference_rows <- function(final) {
             "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-0p5-short",
             "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-less-on-t-two-dpoint-0p5-short",
             "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-one-dpoint-0p5-short",
-            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-m0p4-short"
+            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-m0p4-short",
+            "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-one-dpoint-m0p4-short",
+            "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-paired-dpoint-m0p4-short",
+            "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p35-n2x2-short"
         ),
-        schedule_id = rep("start20-by10-looks20", 4),
-        evidence_threshold = c(10, 10, 10, 3),
+        schedule_id = c(rep("start20-by10-looks20", 4),
+                        rep("start20-by10-looks05", 3)),
+        evidence_threshold = c(10, 10, 10, 3, 3, 3, 10),
         stringsAsFactors = FALSE)
     selected <- list()
     idx <- 0L
@@ -963,6 +980,384 @@ pick_t_sequential_reference_rows <- function(final) {
         return(final[0, , drop = FALSE])
     }
     do.call(rbind, selected)
+}
+
+pick_t_sequential_search_rows <- function(final) {
+    cases <- data.frame(
+        bf_prior_id = c(
+            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-two-sided-on-t-two-dpoint-0-short",
+            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-0p5-short",
+            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-less-on-t-two-dpoint-0p5-short",
+            "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-one-dpoint-0p5-short",
+            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-two-sided-on-t-paired-dpoint-0p5-short",
+            "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p35-n2x1p1-short",
+            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-m0p4-short",
+            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-two-sided-on-t-two-dpoint-0-long",
+            "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p2-long",
+            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-two-sided-on-t-one-dnorm-0p2-s0p5-short",
+            "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-paired-dnorm-0p5-s0p1-short",
+            "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-one-dpoint-m0p4-short",
+            "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-paired-dpoint-m0p4-short",
+            "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-two-dpoint-m0p35-n2x1p1-short",
+            "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p35-n2x2-short",
+            "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-one-dpoint-0p2-long",
+            "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-paired-dpoint-0p2-long",
+            "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dnorm-0p2-s0p5-n2x1p1-long"
+        ),
+        schedule_id = rep("start20-by10-looks05", 18),
+        stringsAsFactors = FALSE)
+
+    selected <- list()
+    idx <- 0L
+    for (i in seq_len(nrow(cases))) {
+        rows <- final[final$bf_prior_id == cases$bf_prior_id[[i]] &
+                          final$schedule_id == cases$schedule_id[[i]] &
+                          final$evidence_threshold %in% c(3, 10, 30),
+                      , drop = FALSE]
+        if (nrow(rows) == 0) next
+        rows <- rows[order(rows$evidence_threshold), , drop = FALSE]
+        for (j in seq_len(nrow(rows))) {
+            idx <- idx + 1L
+            selected[[idx]] <- rows[j, , drop = FALSE]
+        }
+    }
+    if (length(selected) == 0) {
+        return(final[0, , drop = FALSE])
+    }
+    do.call(rbind, selected)
+}
+
+sequential_search_empty <- function() {
+    data.frame(
+        fixture_set_id = character(),
+        family = character(),
+        bf_type = character(),
+        bf_prior_id = character(),
+        design_case_id = character(),
+        schedule_id = character(),
+        schedule_family_id = character(),
+        n_looks = integer(),
+        evidence_threshold = numeric(),
+        evidence = character(),
+        target_probability = numeric(),
+        simulation_max_n = integer(),
+        simulation_crossing_n = integer(),
+        simulation_crossing_lower_n = integer(),
+        simulation_crossing_upper_n = integer(),
+        package_n = numeric(),
+        actual_probability = numeric(),
+        reached = logical(),
+        evaluations = integer(),
+        nrange_lower = integer(),
+        nrange_upper = integer(),
+        absolute_n_error = numeric(),
+        relative_n_error = numeric(),
+        warning_message = character(),
+        error_message = character(),
+        stringsAsFactors = FALSE
+    )
+}
+
+sequential_target_probability <- function(row, evidence) {
+    if (identical(evidence, "H1")) {
+        return(row$pH1[[1]])
+    }
+    if (identical(evidence, "H0")) {
+        return(row$pH0[[1]])
+    }
+    stop("unsupported sequential-search evidence target: ", evidence)
+}
+
+sequential_search_simulation_crossing_bounds <- function(fixture, row,
+                                                         z = 2) {
+    event_col <- if (identical(row$evidence[[1]], "H1")) {
+        "cum_pH1"
+    } else {
+        "cum_pH0"
+    }
+    mcse_col <- if (identical(row$evidence[[1]], "H1")) {
+        "mcse_cum_pH1"
+    } else {
+        "mcse_cum_pH0"
+    }
+    target_mcse_col <- if (identical(row$evidence[[1]], "H1")) {
+        "mcse_pH1"
+    } else {
+        "mcse_pH0"
+    }
+    curve <- fixture$cumulative_summary[
+        fixture$cumulative_summary$bf_prior_id == row$bf_prior_id[[1]] &
+            fixture$cumulative_summary$design_case_id ==
+                row$design_case_id[[1]] &
+            fixture$cumulative_summary$schedule_id == row$schedule_id[[1]] &
+            fixture$cumulative_summary$evidence_threshold ==
+                row$evidence_threshold[[1]],
+        , drop = FALSE]
+    if (nrow(curve) == 0 || !event_col %in% names(curve)) {
+        fallback <- row$simulation_max_n[[1]]
+        return(c(crossing = fallback, lower = fallback, upper = fallback))
+    }
+    curve <- curve[order(curve$look), , drop = FALSE]
+    target <- row$target_probability[[1]]
+    target_mcse <- if (target_mcse_col %in% names(row)) {
+        row[[target_mcse_col]][[1]]
+    } else if (mcse_col %in% names(curve)) {
+        utils::tail(curve[[mcse_col]], 1)
+    } else {
+        NA_real_
+    }
+    if (!is.finite(target_mcse) || target_mcse < 0) {
+        target_mcse <- 0
+    }
+    crossing_for <- function(probability) {
+        probability <- pmin(1, pmax(0, probability))
+        hits <- which(curve[[event_col]] >= probability - 1e-12)
+        if (length(hits) == 0) {
+            return(max(curve$n, na.rm = TRUE))
+        }
+        as.integer(curve$n[[hits[[1]]]])
+    }
+    c(crossing = crossing_for(target),
+      lower = crossing_for(target - z * target_mcse),
+      upper = crossing_for(target + z * target_mcse))
+}
+
+sequential_search_candidate_rows <- function(fixture,
+                                             probability_range = c(0.2, 0.85),
+                                             max_per_evidence = NULL) {
+    if (!fixture$spec$family %in% c("z", "t")) {
+        return(data.frame())
+    }
+    rows <- if (identical(fixture$spec$family, "z")) {
+        pick_sequential_reference_rows(fixture$final_summary)
+    } else {
+        pick_t_sequential_search_rows(fixture$final_summary)
+    }
+    if (nrow(rows) == 0) {
+        return(data.frame())
+    }
+    if (is.null(max_per_evidence)) {
+        max_per_evidence <- if (identical(fixture$spec$family, "t")) 8L else 3L
+    }
+
+    candidates <- list()
+    idx <- 0L
+    for (i in seq_len(nrow(rows))) {
+        row <- rows[i, , drop = FALSE]
+        schedule <- sequential_fixture_schedule(fixture,
+                                                row$schedule_id[[1]])
+        if (!is.finite(schedule$increment) || schedule$increment <= 0) {
+            next
+        }
+        simulation_max_n <- as.integer(max(schedule$n))
+        minimum_max_n <- if (identical(fixture$spec$family, "z") &&
+                             !identical(row$bf_type[[1]], "moment")) {
+            100L
+        } else {
+            50L
+        }
+        if (simulation_max_n < minimum_max_n) {
+            next
+        }
+        for (evidence in c("H1", "H0")) {
+            target <- sequential_target_probability(row, evidence)
+            if (!is.finite(target) ||
+                target < probability_range[[1]] ||
+                target > probability_range[[2]]) {
+                next
+            }
+            idx <- idx + 1L
+            candidate <- row
+            candidate$evidence <- evidence
+            candidate$target_probability <- target
+            candidate$simulation_max_n <- simulation_max_n
+            candidate$search_upper_n <- as.integer(
+                simulation_max_n + 5L * schedule$increment)
+            candidate$target_score <- abs(target - 0.5)
+            candidate$source_order <- idx
+            candidates[[idx]] <- candidate
+        }
+    }
+    if (length(candidates) == 0) {
+        return(data.frame())
+    }
+    candidates <- do.call(rbind, candidates)
+    rownames(candidates) <- NULL
+
+    selected <- list()
+    out_idx <- 0L
+    for (evidence in c("H1", "H0")) {
+        group <- candidates[candidates$evidence == evidence, , drop = FALSE]
+        if (nrow(group) == 0) next
+        group$key <- paste(group$bf_prior_id, group$schedule_id, sep = "\r")
+        diverse <- list()
+        div_idx <- 0L
+        for (key in unique(group$key)) {
+            rows_key <- group[group$key == key, , drop = FALSE]
+            rows_key <- rows_key[order(rows_key$target_score,
+                                       rows_key$evidence_threshold,
+                                       rows_key$source_order),
+                                 , drop = FALSE]
+            div_idx <- div_idx + 1L
+            diverse[[div_idx]] <- rows_key[1, , drop = FALSE]
+        }
+        group <- do.call(rbind, diverse)
+        group <- group[order(group$target_score, group$source_order),
+                       , drop = FALSE]
+        n_take <- min(max_per_evidence, nrow(group))
+        for (i in seq_len(n_take)) {
+            out_idx <- out_idx + 1L
+            selected[[out_idx]] <- group[i, , drop = FALSE]
+        }
+    }
+    if (length(selected) == 0) {
+        return(data.frame())
+    }
+    selected <- do.call(rbind, selected)
+    selected$key <- NULL
+    rownames(selected) <- NULL
+    selected
+}
+
+sequential_search_call <- function(expr) {
+    warnings <- character()
+    value <- withCallingHandlers(
+        tryCatch(expr, error = function(e) e),
+        warning = function(w) {
+            warnings <<- c(warnings, conditionMessage(w))
+            invokeRestart("muffleWarning")
+        }
+    )
+    list(value = value, warnings = warnings)
+}
+
+sequential_search_reference <- function(fixture, row) {
+    schedule <- sequential_fixture_schedule(fixture, row$schedule_id[[1]])
+    bf_prior <- bfpwr_sim_find_bf_prior_case(row$bf_prior_id[[1]],
+                                             bf_priors)
+    design <- bfpwr_sim_find_design_case(row$design_case_id[[1]], designs)
+    prior <- bf_prior$analysis_prior
+    dp <- bfpwr_sim_design_prior_mean_sd(design)
+    target <- if (identical(row$evidence[[1]], "H1")) "h1" else "h0"
+    nrange <- c(schedule$start_n, row$search_upper_n[[1]])
+    simulation_crossing <- sequential_search_simulation_crossing_bounds(
+        fixture, row)
+
+    if (identical(fixture$spec$family, "z")) {
+        type <- switch(
+            bf_prior$bf_type,
+            normal = "normal",
+            moment = "moment",
+            directional = "directional",
+            stop("unsupported z sequential BF type: ", bf_prior$bf_type)
+        )
+        args <- list(
+            k1 = row$k1[[1]],
+            k0 = row$k0[[1]],
+            power = row$target_probability[[1]],
+            usd = design$generation$usd,
+            null = prior$null,
+            psd = prior$psd,
+            dpm = dp$dpm,
+            dpsd = dp$dpsd,
+            type = type,
+            target = target,
+            nrange = nrange,
+            minN = schedule$start_n,
+            by = schedule$increment,
+            strict = TRUE,
+            search = "adaptive",
+            details = TRUE
+        )
+        if (!identical(type, "moment")) {
+            args$pm <- prior$pm
+        }
+        call <- sequential_search_call(do.call(nbf01seq, args))
+    } else {
+        ratio <- if (identical(prior$type, "two.sample")) {
+            design$generation$n2_multiplier
+        } else {
+            1
+        }
+        args <- list(
+            k1 = row$k1[[1]],
+            k0 = row$k0[[1]],
+            power = row$target_probability[[1]],
+            null = prior$null,
+            plocation = prior$plocation,
+            pscale = prior$pscale,
+            pdf = prior$pdf,
+            dpm = dp$dpm,
+            dpsd = dp$dpsd,
+            type = prior$type,
+            alternative = prior$alternative,
+            target = target,
+            nrange = nrange,
+            minN = schedule$start_n,
+            by = schedule$increment,
+            ratio = ratio,
+            strict = TRUE,
+            trange = "adaptive",
+            search = "adaptive",
+            details = TRUE
+        )
+        call <- sequential_search_call(do.call(ntbf01seq, args))
+    }
+
+    value <- call$value
+    ok <- !inherits(value, "error")
+    package_n <- if (ok) value$n else NA_real_
+    actual <- if (ok) value$actualPower else NA_real_
+    reached <- if (ok) isTRUE(value$reached) else FALSE
+    evaluations <- if (ok) value$evaluations else NA_integer_
+    error <- if (ok) {
+        if (is.null(value$error)) NA_character_ else value$error
+    } else {
+        conditionMessage(value)
+    }
+
+    data.frame(
+        fixture_set_id = row$fixture_set_id[[1]],
+        family = row$family[[1]],
+        bf_type = row$bf_type[[1]],
+        bf_prior_id = row$bf_prior_id[[1]],
+        design_case_id = row$design_case_id[[1]],
+        schedule_id = row$schedule_id[[1]],
+        schedule_family_id = row$schedule_family_id[[1]],
+        n_looks = row$n_looks[[1]],
+        evidence_threshold = row$evidence_threshold[[1]],
+        evidence = row$evidence[[1]],
+        target_probability = row$target_probability[[1]],
+        simulation_max_n = row$simulation_max_n[[1]],
+        simulation_crossing_n = simulation_crossing[["crossing"]],
+        simulation_crossing_lower_n = simulation_crossing[["lower"]],
+        simulation_crossing_upper_n = simulation_crossing[["upper"]],
+        package_n = package_n,
+        actual_probability = actual,
+        reached = reached,
+        evaluations = evaluations,
+        nrange_lower = nrange[[1]],
+        nrange_upper = nrange[[2]],
+        absolute_n_error = package_n - simulation_crossing[["crossing"]],
+        relative_n_error = (package_n - simulation_crossing[["crossing"]]) /
+            simulation_crossing[["crossing"]],
+        warning_message = paste(unique(call$warnings), collapse = " | "),
+        error_message = error,
+        stringsAsFactors = FALSE
+    )
+}
+
+sequential_search_diagnostics <- function(fixture) {
+    candidates <- sequential_search_candidate_rows(fixture)
+    if (nrow(candidates) == 0) {
+        return(sequential_search_empty())
+    }
+    rows <- lapply(seq_len(nrow(candidates)), function(i) {
+        sequential_search_reference(fixture, candidates[i, , drop = FALSE])
+    })
+    out <- do.call(rbind, rows)
+    rownames(out) <- NULL
+    out
 }
 
 sequential_reference_diagnostics <- function(fixture) {
@@ -987,6 +1382,10 @@ sequential_reference_diagnostics <- function(fixture) {
         if (!"reference" %in% names(probability) &&
             "reference_prob" %in% names(probability)) {
             probability$reference <- probability$reference_prob
+        }
+        if (!"look" %in% names(probability) &&
+            "n_looks" %in% names(probability)) {
+            probability$look <- probability$n_looks
         }
         if (!"n_looks" %in% names(probability) &&
             "look" %in% names(probability)) {
@@ -1088,6 +1487,8 @@ sequential_reference_diagnostics <- function(fixture) {
             design_case_id = row$design_case_id,
             schedule_id = row$schedule_id,
             n_looks = row$n_looks,
+            look = row$n_looks,
+            n = row$max_n,
             max_n = row$max_n,
             evidence_threshold = row$evidence_threshold,
             event = names(empirical),
@@ -1163,6 +1564,27 @@ sequential_reference_diagnostics <- function(fixture) {
     list(probability = probability, en = en)
 }
 
+sequential_final_probability_rows <- function(rows) {
+    if (nrow(rows) == 0) {
+        return(rows)
+    }
+    if (!"look" %in% names(rows)) {
+        rows$look <- rows$n_looks
+    }
+    group_cols <- intersect(
+        c("fixture_set_id", "bf_prior_id", "design_case_id",
+          "schedule_id", "evidence_threshold", "event"),
+        names(rows))
+    key <- do.call(paste, c(rows[group_cols], sep = "\r"))
+    rows$.row_order <- seq_len(nrow(rows))
+    rows <- rows[order(key, rows$look, rows$.row_order), , drop = FALSE]
+    key <- do.call(paste, c(rows[group_cols], sep = "\r"))
+    out <- rows[!duplicated(key, fromLast = TRUE), , drop = FALSE]
+    out$.row_order <- NULL
+    rownames(out) <- NULL
+    out
+}
+
 plot_sequential_fixture <- function(spec) {
     fixture <- bfpwr_sim_read_fixture_summary(
         corpus_root = corpus_root,
@@ -1173,40 +1595,57 @@ plot_sequential_fixture <- function(spec) {
 
     diagnostics <- sequential_reference_diagnostics(fixture)
     rows <- diagnostics$probability
+    final_rows <- sequential_final_probability_rows(rows)
     en <- diagnostics$en
-    if (nrow(rows) == 0) {
+    search <- sequential_search_diagnostics(fixture)
+    if (nrow(rows) == 0 && nrow(search) == 0) {
         return(invisible(NULL))
     }
 
-    old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1),
+    old_par <- par(mfrow = c(2, 3), mar = c(4, 4, 3, 1),
                    oma = c(0, 0, 3, 0))
     on.exit(par(old_par), add = TRUE)
 
-    baseline_nsim <- stats::median(rows$nsim[rows$nsim > 0], na.rm = TRUE)
-    probability_ylim <- range(rows$abs_error, finite = TRUE)
-    if (is.finite(baseline_nsim)) {
-        pgrid <- seq(0, 1, length.out = 301)
-        probability_ylim <- range(probability_ylim,
-                                  3 * bfpwr_sim_mcse(pgrid, baseline_nsim),
-                                  finite = TRUE)
-    }
     event_cols <- c(H1 = "firebrick", H0 = "steelblue", Inc = "grey30")
-    plot(rows$empirical, rows$abs_error,
-         pch = 16, cex = 0.65, col = event_cols[rows$event],
-         xlab = "Simulated probability",
-         ylab = "|package - simulation|",
-         main = "Final package error",
-         ylim = c(0, probability_ylim[[2]]))
-    if (is.finite(baseline_nsim)) {
-        lines(pgrid, 2 * bfpwr_sim_mcse(pgrid, baseline_nsim),
-              col = "steelblue", lwd = 2)
-        lines(pgrid, 3 * bfpwr_sim_mcse(pgrid, baseline_nsim),
-              col = "firebrick", lwd = 2, lty = 2)
+    if (nrow(final_rows) > 0) {
+        baseline_nsim <- stats::median(final_rows$nsim[final_rows$nsim > 0],
+                                       na.rm = TRUE)
+        probability_ylim <- range(final_rows$abs_error, finite = TRUE)
+        if (!all(is.finite(probability_ylim))) {
+            probability_ylim <- c(0, 1e-6)
+        }
+        if (is.finite(baseline_nsim)) {
+            pgrid <- seq(0, 1, length.out = 301)
+            probability_ylim <- range(
+                probability_ylim,
+                3 * bfpwr_sim_mcse(pgrid, baseline_nsim),
+                finite = TRUE)
+        }
+        plot(final_rows$empirical, final_rows$abs_error,
+             pch = 16, cex = 0.65, col = event_cols[final_rows$event],
+             xlab = "Simulated probability",
+             ylab = "|package - simulation|",
+             main = "Final package error",
+             ylim = c(0, probability_ylim[[2]]))
+        if (is.finite(baseline_nsim)) {
+            lines(pgrid, 2 * bfpwr_sim_mcse(pgrid, baseline_nsim),
+                  col = "steelblue", lwd = 2)
+            lines(pgrid, 3 * bfpwr_sim_mcse(pgrid, baseline_nsim),
+                  col = "firebrick", lwd = 2, lty = 2)
+        }
+        legend("topright", legend = names(event_cols), col = event_cols,
+               pch = 16, bty = "n", cex = 0.75)
+    } else {
+        plot.new()
+        title("Final package error")
+        text(0.5, 0.5, "No probability checks")
     }
-    legend("topright", legend = names(event_cols), col = event_cols,
-           pch = 16, bty = "n", cex = 0.75)
 
-    standardized <- rows[is.finite(rows$error_mcse), , drop = FALSE]
+    standardized <- if (nrow(rows) > 0 && "error_mcse" %in% names(rows)) {
+        rows[is.finite(rows$error_mcse), , drop = FALSE]
+    } else {
+        data.frame()
+    }
     if (nrow(standardized) > 0) {
         tail_floor <- min(1 / (2 * standardized$nsim[standardized$nsim > 0]),
                           na.rm = TRUE)
@@ -1244,50 +1683,133 @@ plot_sequential_fixture <- function(spec) {
         text(0.5, 0.5, "No expected-sample-size checks")
     }
 
-    spaghetti <- rows[is.finite(rows$abs_error) & is.finite(rows$n_looks),
-                      , drop = FALSE]
-    threshold_levels <- sort(unique(spaghetti$evidence_threshold))
-    threshold_palette <- rep(c("firebrick", "steelblue", "grey30"),
-                             length.out = length(threshold_levels))
-    threshold_cols <- setNames(threshold_palette, threshold_levels)
-    y_max <- max(spaghetti$abs_error, na.rm = TRUE)
-    if (!is.finite(y_max) || y_max <= 0) {
-        y_max <- 1e-6
+    if (nrow(rows) > 0) {
+        spaghetti <- rows[is.finite(rows$abs_error) &
+                              is.finite(rows$n_looks),
+                          , drop = FALSE]
+    } else {
+        spaghetti <- data.frame()
     }
-    look_ticks <- sort(unique(spaghetti$n_looks))
-    spaghetti$look_position <- match(spaghetti$n_looks, look_ticks)
-    spaghetti$line_id <- paste(spaghetti$design_case_id,
-                               spaghetti$bf_prior_id,
-                               spaghetti$evidence_threshold,
-                               spaghetti$event,
-                               sep = "\r")
-    event_lty <- c(H1 = 1, H0 = 2, Inc = 3)
-    plot(NA, NA,
-         xaxt = "n",
-         xlab = "Number of looks",
-         ylab = "|package - simulation|",
-         main = "Package error by looks",
-         xlim = c(0.8, length(look_ticks) + 0.2),
-         ylim = c(0, 1.05 * y_max))
-    axis(1, at = seq_along(look_ticks), labels = look_ticks)
-    for (group in split(spaghetti, spaghetti$line_id)) {
-        group <- group[order(group$look_position), , drop = FALSE]
-        threshold <- as.character(group$evidence_threshold[[1]])
-        event <- as.character(group$event[[1]])
-        col <- grDevices::adjustcolor(threshold_cols[[threshold]],
-                                      alpha.f = 0.45)
-        lty <- if (event %in% names(event_lty)) event_lty[[event]] else 1
-        if (nrow(group) > 1) {
-            lines(group$look_position, group$abs_error,
-                  col = col, lwd = 0.8, lty = lty)
+    if (nrow(spaghetti) > 0) {
+        threshold_levels <- sort(unique(spaghetti$evidence_threshold))
+        threshold_palette <- rep(c("firebrick", "steelblue", "grey30"),
+                                 length.out = length(threshold_levels))
+        threshold_cols <- setNames(threshold_palette, threshold_levels)
+        y_max <- max(spaghetti$abs_error, na.rm = TRUE)
+        if (!is.finite(y_max) || y_max <= 0) {
+            y_max <- 1e-6
         }
-        points(group$look_position, group$abs_error,
-               col = col, pch = 16, cex = 0.45)
+        if (!"look" %in% names(spaghetti)) {
+            spaghetti$look <- spaghetti$n_looks
+        }
+        look_ticks <- sort(unique(spaghetti$look))
+        spaghetti$look_position <- match(spaghetti$look, look_ticks)
+        spaghetti$line_id <- paste(spaghetti$design_case_id,
+                                   spaghetti$bf_prior_id,
+                                   spaghetti$schedule_id,
+                                   spaghetti$evidence_threshold,
+                                   spaghetti$event,
+                                   sep = "\r")
+        event_lty <- c(H1 = 1, H0 = 2, Inc = 3)
+        plot(NA, NA,
+             xaxt = "n",
+             xlab = "Number of looks",
+             ylab = "|package - simulation|",
+             main = "Package error by looks",
+             xlim = c(0.8, length(look_ticks) + 0.2),
+             ylim = c(0, 1.05 * y_max))
+        draw_sparse_axis(look_ticks)
+        for (group in split(spaghetti, spaghetti$line_id)) {
+            group <- group[order(group$look_position), , drop = FALSE]
+            threshold <- as.character(group$evidence_threshold[[1]])
+            event <- as.character(group$event[[1]])
+            col <- grDevices::adjustcolor(threshold_cols[[threshold]],
+                                          alpha.f = 0.45)
+            lty <- if (event %in% names(event_lty)) {
+                event_lty[[event]]
+            } else {
+                1
+            }
+            if (nrow(group) > 1) {
+                lines(group$look_position, group$abs_error,
+                      col = col, lwd = 0.8, lty = lty)
+            }
+            points(group$look_position, group$abs_error,
+                   col = col, pch = 16, cex = 0.45)
+        }
+        legend("topright", legend = paste("BF", names(threshold_cols)),
+               col = threshold_cols, pch = 16, lty = 1, bty = "n", cex = 0.65)
+        legend("topleft", legend = names(event_lty),
+               lty = event_lty, col = "grey30", bty = "n", cex = 0.65)
+    } else {
+        plot.new()
+        title("Package error by looks")
+        text(0.5, 0.5, "No look-count diagnostics")
     }
-    legend("topright", legend = paste("BF", names(threshold_cols)),
-           col = threshold_cols, pch = 16, lty = 1, bty = "n", cex = 0.65)
-    legend("topleft", legend = names(event_lty),
-           lty = event_lty, col = "grey30", bty = "n", cex = 0.65)
+
+    search_cols <- c(H1 = "firebrick", H0 = "steelblue")
+    search_valid <- search[is.finite(search$package_n) &
+                               is.finite(search$simulation_crossing_n),
+                           , drop = FALSE]
+    if (nrow(search_valid) > 0) {
+        lim <- range(c(search_valid$simulation_crossing_lower_n,
+                       search_valid$simulation_crossing_n,
+                       search_valid$simulation_crossing_upper_n,
+                       search_valid$package_n),
+                     finite = TRUE)
+        if (diff(lim) == 0) {
+            pad <- max(1, 0.05 * lim[[2]])
+            lim <- lim + c(-pad, pad)
+        }
+        point_cols <- search_cols[search_valid$evidence]
+        segment_cols <- grDevices::adjustcolor(point_cols, alpha.f = 0.45)
+        plot(search_valid$simulation_crossing_n, search_valid$package_n,
+             pch = 16, cex = 0.85, col = point_cols,
+             xlab = "Simulated crossing N (2 SE range)",
+             ylab = "Package search N",
+             main = "Adaptive N search",
+             xlim = lim, ylim = lim)
+        segments(search_valid$simulation_crossing_lower_n,
+                 search_valid$package_n,
+                 search_valid$simulation_crossing_upper_n,
+                 search_valid$package_n,
+                 col = segment_cols, lwd = 2)
+        points(search_valid$simulation_crossing_n, search_valid$package_n,
+               pch = 16, cex = 0.85, col = point_cols)
+        abline(0, 1, col = "grey45", lwd = 2)
+        legend("topleft", legend = names(search_cols), col = search_cols,
+               pch = 16, bty = "n", cex = 0.75)
+    } else {
+        plot.new()
+        title("Adaptive N search")
+        text(0.5, 0.5, "No successful search checks")
+    }
+
+    search_power <- search_valid[is.finite(search_valid$actual_probability),
+                                 , drop = FALSE]
+    if (nrow(search_power) > 0) {
+        lim <- range(c(search_power$target_probability,
+                       search_power$actual_probability),
+                     finite = TRUE)
+        if (diff(lim) == 0) {
+            pad <- max(0.01, 0.05 * lim[[2]])
+            lim <- lim + c(-pad, pad)
+        }
+        lim <- pmin(1, pmax(0, lim + c(-0.02, 0.02)))
+        point_cols <- search_cols[search_power$evidence]
+        plot(search_power$target_probability,
+             search_power$actual_probability,
+             pch = 16, cex = 0.85, col = point_cols,
+             xlab = "Target probability from simulation",
+             ylab = "Package probability at search N",
+             main = "Search target agreement",
+             xlim = lim, ylim = lim)
+        abline(0, 1, col = "grey45", lwd = 2)
+    } else {
+        plot.new()
+        title("Search target agreement")
+        text(0.5, 0.5, "No successful search checks")
+    }
     add_fixture_overtitle(spec, "sequential")
 }
 
@@ -1297,7 +1819,8 @@ fixture_report_objects <- c(
     "designs", "bf_priors", "fixtures", "family_labels",
     "latex_table", "fmt_number", "fmt_value", "format_named_list",
     "format_integer_runs", "fixture_plot_title", "add_fixture_overtitle",
-    "format_sequence", "drop_empty_columns", "format_design_prior",
+    "format_sequence", "draw_sparse_axis", "drop_empty_columns",
+    "format_design_prior",
     "format_sampling_type", "format_function_name", "family_design_cases",
     "design_short_prefix", "design_short_id_map", "format_design_refs",
     "format_sided_suffix", "format_h1_prior", "format_h0_prior",
@@ -1308,8 +1831,13 @@ fixture_report_objects <- c(
     "plot_event_error_summary", "plot_fixed_fixture",
     "sequential_fixture_schedule", "z_sequential_reference",
     "t_n2", "t_sequential_reference", "pick_sequential_reference_rows",
-    "pick_t_sequential_reference_rows",
-    "sequential_reference_diagnostics", "plot_sequential_fixture"
+    "pick_t_sequential_reference_rows", "pick_t_sequential_search_rows",
+    "sequential_search_empty", "sequential_target_probability",
+    "sequential_search_simulation_crossing_bounds",
+    "sequential_search_candidate_rows", "sequential_search_call",
+    "sequential_search_reference", "sequential_search_diagnostics",
+    "sequential_reference_diagnostics", "sequential_final_probability_rows",
+    "plot_sequential_fixture"
 )
 for (object in fixture_report_objects) {
     assign(object, get(object), envir = .GlobalEnv)
@@ -1337,7 +1865,7 @@ if (!registry_available) {
 }
 @
 
-<<family-sections, results = 'asis', echo = FALSE, fig.height = 6.8, fig.width = 6.8, out.width = "\\textwidth">>=
+<<family-sections, results = 'asis', echo = FALSE, fig.height = 6.8, fig.width = 9.2, out.width = "\\textwidth">>=
 if (registry_available) for (family in names(family_labels)) {
     cat("\\section{", family_labels[[family]], "}\n", sep = "")
 
@@ -1387,9 +1915,9 @@ if (registry_available) for (family in names(family_labels)) {
         cat("\\noindent No sequential-design results are available for this statistical test.\n\n")
     } else {
         if (identical(family, "z")) {
-            cat("\\noindent Sequential-design plots validate package probability calculations against selected simulated fixture summaries. The panels show final package error, package error by tail depth, expected sample size agreement, and design-level package-error traces by number of looks. Expected sample size points use the same selected fixture rows as the probability checks and are not aggregated. Package calculations are checked at 2, 5, 10, 20, and 50 looks for normal and directional \\textit{z}-test priors. Moment-prior checks currently cover 2 and 5 looks; the remaining sequential schedules are retained in the settings table and automated fixtures.\n\n")
+                cat("\\noindent Sequential-design plots validate package probability calculations and adaptive sample-size searches against selected simulated fixture summaries. The panels show final package error, package error by tail depth, expected sample size agreement, design-level package-error traces by number of looks, package adaptive-search N against the first simulated crossing N for the target probability with a two-standard-error simulation range, and agreement between the simulated target probability and the package probability at the returned N. Expected sample size points use the same selected fixture rows as the probability checks and are not aggregated. Package calculations are checked at 2, 5, 10, 20, and 50 looks for normal and directional \\textit{z}-test priors. Moment-prior checks currently cover 2 and 5 looks; the remaining sequential schedules are retained in the settings table and automated fixtures.\n\n")
         } else if (identical(family, "t")) {
-            cat("\\noindent Sequential-design plots validate selected one-sided \\textit{t}-test fixture summaries against strict \\texttt{ptbf01seq()} calculations at 20 looks. Shifted-null unequal two-sample, paired, and 50/100/200-look stress schedules are retained in the automated fixture tests as manifest, deterministic-summary, and row-presence checks until the sequential \\textit{t}-test reference path is improved for those settings.\n\n")
+                cat("\\noindent Sequential-design plots validate selected \\textit{t}-test fixture summaries against strict \\texttt{ptbf01seq()} calculations and adaptive \\texttt{ntbf01seq()} sample-size searches. Probability and expected-sample-size checks use curated strict-reference rows: the original 20-look cases plus five-look wrong-direction and unequal-allocation cases from the expanded registry. The adaptive N-search panels compare package search N to the first simulated crossing N for the target probability with a two-standard-error simulation range. They use representative five-look rows spanning two-sided, one-sided, one-sample, paired, equal and unequal two-sample, shifted-null, wrong-direction, diffuse-design, and long-grid settings; 50/100/200-look stress schedules remain covered by the automated fixture integrity checks.\n\n")
         } else if (identical(family, "binomial")) {
             cat("\\noindent Sequential binomial fixture settings are retained for future package-function validation. The package does not currently expose a sequential binomial evaluation function, so no sequential binomial package-calculation figure is rendered.\n\n")
         } else {

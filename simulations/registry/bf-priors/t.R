@@ -48,12 +48,26 @@ bfpwr_sim_bf_prior_cases_t <- function(designs) {
         "t-two-dpoint-0p5-short",
         "t-two-dnorm-0p5-s0p1-short",
         "t-two-dnorm-0p5-s0p5-short",
+        "t-one-dpoint-0p2-short",
         "t-one-dpoint-0p5-short",
+        "t-one-dnorm-0p5-s0p1-short",
+        "t-one-dnorm-0p2-s0p5-short",
+        "t-paired-dpoint-0p2-short",
         "t-paired-dpoint-0p5-short",
+        "t-paired-dnorm-0p5-s0p1-short",
+        "t-paired-dnorm-0p2-s0p5-short",
         "t-two-dpoint-0p35-n2x1p1-short",
+        "t-two-dnorm-0p35-s0p2-n2x1p1-short",
+        "t-two-dpoint-0p35-n2x2-short",
         "t-two-dpoint-0p2-long",
+        "t-one-dpoint-0p2-long",
+        "t-paired-dpoint-0p2-long",
+        "t-two-dpoint-0p2-n2x1p1-long",
         "t-two-dnorm-0p2-s0p1-long",
-        "t-two-dnorm-0p2-s0p5-long"
+        "t-one-dnorm-0p2-s0p5-long",
+        "t-paired-dnorm-0p2-s0p5-long",
+        "t-two-dnorm-0p2-s0p5-long",
+        "t-two-dnorm-0p2-s0p5-n2x1p1-long"
     )
     for (id in positive_ids) {
         add(bfpwr_sim_bf_prior_t(
@@ -64,9 +78,21 @@ bfpwr_sim_bf_prior_cases_t <- function(designs) {
 
     local_shift_ids <- c(
         "t-two-dpoint-0p35-n2x1p1-short",
+        "t-one-dpoint-0p2-short",
+        "t-one-dnorm-0p2-s0p5-short",
+        "t-paired-dpoint-0p2-short",
+        "t-paired-dnorm-0p2-s0p5-short",
+        "t-two-dnorm-0p35-s0p2-n2x1p1-short",
+        "t-two-dpoint-0p35-n2x2-short",
         "t-two-dpoint-0p2-long",
+        "t-one-dpoint-0p2-long",
+        "t-paired-dpoint-0p2-long",
+        "t-two-dpoint-0p2-n2x1p1-long",
         "t-two-dnorm-0p2-s0p1-long",
-        "t-two-dnorm-0p2-s0p5-long"
+        "t-one-dnorm-0p2-s0p5-long",
+        "t-paired-dnorm-0p2-s0p5-long",
+        "t-two-dnorm-0p2-s0p5-long",
+        "t-two-dnorm-0p2-s0p5-n2x1p1-long"
     )
     for (id in local_shift_ids) {
         add(bfpwr_sim_bf_prior_t(
@@ -80,6 +106,7 @@ bfpwr_sim_bf_prior_cases_t <- function(designs) {
         "t-one-dpoint-0-short",
         "t-paired-dpoint-0-short",
         "t-two-dpoint-0-n2x1p1-short",
+        "t-two-dpoint-0-n2x2-short",
         "t-two-dpoint-0-long"
     )
     for (id in null_shift_ids) {
@@ -87,6 +114,19 @@ bfpwr_sim_bf_prior_cases_t <- function(designs) {
             by_id(id), null = 0.2, plocation = 0.5, pscale = 0.35,
             pdf = 30, alternative = "greater",
             rationale = "shifted-null high-df positive Student-t prior"))
+    }
+
+    wrong_direction_ids <- c(
+        "t-two-dpoint-m0p4-short",
+        "t-one-dpoint-m0p4-short",
+        "t-paired-dpoint-m0p4-short",
+        "t-two-dpoint-m0p35-n2x1p1-short"
+    )
+    for (id in wrong_direction_ids) {
+        add(bfpwr_sim_bf_prior_t(
+            by_id(id), null = 0, plocation = 0.5, pscale = 0.1,
+            pdf = 3, alternative = "greater",
+            rationale = "localized positive Student-t prior under a wrong-direction design"))
     }
 
     cases

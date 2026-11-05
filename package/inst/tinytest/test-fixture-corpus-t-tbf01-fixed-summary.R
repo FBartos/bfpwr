@@ -73,35 +73,53 @@ representative_cases <- data.frame(
         "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-two-sided-on-t-two-dpoint-0-long",
         "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-two-dpoint-0p2-long",
         "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dnorm-0p2-s0p5-long",
-        "t-tbf01-student-t-null0-loc0-scale0p70710678-df30-two-sided-on-t-two-dnorm-0p2-s0p5-long"
+        "t-tbf01-student-t-null0-loc0-scale0p70710678-df30-two-sided-on-t-two-dnorm-0p2-s0p5-long",
+        "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-two-sided-on-t-one-dnorm-0p2-s0p5-short",
+        "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-paired-dnorm-0p5-s0p1-short",
+        "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-one-dpoint-m0p4-short",
+        "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-paired-dpoint-m0p4-short",
+        "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-two-dpoint-m0p35-n2x1p1-short",
+        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p35-n2x2-short",
+        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-one-dpoint-0p2-long",
+        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-paired-dpoint-0p2-long",
+        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dnorm-0p2-s0p5-n2x1p1-long"
     ),
     design_role = c(
         "null", "alternative", "alternative", "alternative", "null",
         "null", "alternative", "alternative", "null", "adversarial",
         "null", "alternative", "null", "alternative", "adversarial",
-        "adversarial"
+        "adversarial", "adversarial", "alternative", "adversarial",
+        "adversarial", "adversarial", "alternative", "alternative",
+        "alternative", "adversarial"
     ),
     sampling = c(
         "two.sample", "two.sample", "two.sample", "two.sample",
         "two.sample", "one.sample", "one.sample", "paired", "paired",
         "two.sample", "two.sample-unequal", "two.sample-unequal",
-        "two.sample", "two.sample", "two.sample", "two.sample"
+        "two.sample", "two.sample", "two.sample", "two.sample",
+        "one.sample", "paired", "one.sample", "paired",
+        "two.sample-unequal", "two.sample-unequal", "one.sample",
+        "paired", "two.sample-unequal"
     ),
     prior_form = c(
         "cauchy", "cauchy", "cauchy", "student-t-df3",
         "student-t-df30", "cauchy", "student-t-local",
         "cauchy", "shifted-null-df30", "wrong-direction",
         "shifted-null-df30", "shifted-null-df3", "cauchy",
-        "student-t-local", "shifted-null-df3", "student-t-df30"
+        "student-t-local", "shifted-null-df3", "student-t-df30",
+        "cauchy", "student-t-local", "wrong-direction",
+        "wrong-direction", "wrong-direction", "shifted-null-df3",
+        "shifted-null-df3", "shifted-null-df3", "shifted-null-df3"
     ),
     alternative = c(
         "two.sided", "greater", "less", "two.sided", "two.sided",
         "two.sided", "greater", "two.sided", "greater", "greater",
         "greater", "greater", "two.sided", "greater", "greater",
-        "two.sided"
+        "two.sided", "two.sided", "greater", "greater", "greater",
+        "greater", "greater", "greater", "greater", "greater"
     ),
     look_grid_name = c(
-        rep("short", 12), rep("long", 4)
+        rep("short", 18), rep("long", 7)
     ),
     stringsAsFactors = FALSE
 )
@@ -116,7 +134,7 @@ expect_true(all(c("two.sample", "one.sample", "paired",
             info = "stratified checks include all t-test sampling paths")
 expect_true(all(c("cauchy", "student-t-df3", "student-t-df30",
                   "student-t-local", "shifted-null-df3",
-                  "shifted-null-df30") %in%
+                  "shifted-null-df30", "wrong-direction") %in%
                     representative_cases$prior_form),
             info = "stratified checks include Cauchy, Student-t, localized, and shifted-null priors")
 expect_true(all(c("two.sided", "greater", "less") %in%

@@ -75,29 +75,47 @@ representative_cases <- data.frame(
         "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p35-n2x1p1-short",
         "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-m0p4-short",
         "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-two-sided-on-t-two-dpoint-0-long",
-        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p2-long"
+        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p2-long",
+        "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-two-sided-on-t-one-dnorm-0p2-s0p5-short",
+        "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-paired-dnorm-0p5-s0p1-short",
+        "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-one-dpoint-m0p4-short",
+        "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-paired-dpoint-m0p4-short",
+        "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-two-dpoint-m0p35-n2x1p1-short",
+        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p35-n2x2-short",
+        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-one-dpoint-0p2-long",
+        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-paired-dpoint-0p2-long",
+        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dnorm-0p2-s0p5-n2x1p1-long"
     ),
     design_role = c(
         "null", "alternative", "alternative", "alternative",
         "alternative", "alternative", "adversarial", "null",
-        "alternative"
+        "alternative", "adversarial", "alternative", "adversarial",
+        "adversarial", "adversarial", "alternative", "alternative",
+        "alternative", "adversarial"
     ),
     sampling = c(
         "two.sample", "two.sample", "two.sample", "one.sample",
         "paired", "two.sample-unequal", "two.sample", "two.sample",
-        "two.sample"
+        "two.sample", "one.sample", "paired", "one.sample", "paired",
+        "two.sample-unequal", "two.sample-unequal", "one.sample",
+        "paired", "two.sample-unequal"
     ),
     prior_form = c(
         "cauchy", "cauchy", "cauchy", "student-t-local",
         "cauchy", "shifted-null-df3", "wrong-direction",
-        "cauchy", "shifted-null-df3"
+        "cauchy", "shifted-null-df3", "cauchy", "student-t-local",
+        "wrong-direction", "wrong-direction", "wrong-direction",
+        "shifted-null-df3", "shifted-null-df3", "shifted-null-df3",
+        "shifted-null-df3"
     ),
     alternative = c(
         "two.sided", "greater", "less", "greater", "two.sided",
-        "greater", "greater", "two.sided", "greater"
+        "greater", "greater", "two.sided", "greater", "two.sided",
+        "greater", "greater", "greater", "greater", "greater",
+        "greater", "greater", "greater"
     ),
     look_grid_name = c(
-        rep("short", 7), "long", "long"
+        rep("short", 13), rep("long", 5)
     ),
     schedule_id = rep("start20-by10-looks05", 9),
     stringsAsFactors = FALSE
@@ -114,6 +132,9 @@ expect_true(all(c("two.sample", "one.sample", "paired",
 expect_true(all(c("two.sided", "greater", "less") %in%
                     representative_cases$alternative),
             info = "stratified sequential checks include two-sided, greater, and less alternatives")
+expect_true(all(c("cauchy", "student-t-local", "shifted-null-df3",
+                  "wrong-direction") %in% representative_cases$prior_form),
+            info = "stratified sequential checks include default, localized, shifted-null, and wrong-direction priors")
 
 for (i in seq_len(nrow(representative_cases))) {
     for (threshold in c(3, 10, 30)) {
@@ -152,10 +173,15 @@ strict_reference_cases <- data.frame(
         "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-0p5-short",
         "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-less-on-t-two-dpoint-0p5-short",
         "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-one-dpoint-0p5-short",
-        "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-m0p4-short"
+        "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-m0p4-short",
+        "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-one-dpoint-m0p4-short",
+        "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-paired-dpoint-m0p4-short",
+        "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p35-n2x2-short"
     ),
-    schedule_id = rep("start20-by10-looks20", 4),
-    evidence_threshold = c(10, 10, 10, 3),
+    schedule_id = c(rep("start20-by10-looks20", 4),
+                    rep("start20-by10-looks05", 3)),
+    evidence_threshold = c(10, 10, 10, 3, 3, 3, 10),
+    expected_n_looks = c(rep(20L, 4), rep(5L, 3)),
     stringsAsFactors = FALSE
 )
 
@@ -169,8 +195,9 @@ for (i in seq_len(nrow(strict_reference_cases))) {
         bf_priors = bf_priors,
         strict = TRUE)
 
-    expect_equal(case$final_row$n_looks[[1]], 20L,
-                 info = paste("strict t reference case uses 20 looks",
+    expect_equal(case$final_row$n_looks[[1]],
+                 strict_reference_cases$expected_n_looks[[i]],
+                 info = paste("strict t reference case uses expected looks",
                               strict_reference_cases$bf_prior_id[[i]]))
     expect_true(
         all(bfpwr_sim_mc_close(case$curve$cum_pH1,
@@ -178,7 +205,7 @@ for (i in seq_len(nrow(strict_reference_cases))) {
                                case$curve$nsim,
                                observed_mcse = case$curve$mcse_cum_pH1,
                                z = 5)),
-        info = paste("20-look strict cumulative H1 agrees with ptbf01seq",
+        info = paste("strict cumulative H1 agrees with ptbf01seq",
                      strict_reference_cases$bf_prior_id[[i]],
                      strict_reference_cases$evidence_threshold[[i]]))
     expect_true(
@@ -187,7 +214,7 @@ for (i in seq_len(nrow(strict_reference_cases))) {
                                case$curve$nsim,
                                observed_mcse = case$curve$mcse_cum_pH0,
                                z = 5)),
-        info = paste("20-look strict cumulative H0 agrees with ptbf01seq",
+        info = paste("strict cumulative H0 agrees with ptbf01seq",
                      strict_reference_cases$bf_prior_id[[i]],
                      strict_reference_cases$evidence_threshold[[i]]))
     expect_true(
@@ -196,13 +223,13 @@ for (i in seq_len(nrow(strict_reference_cases))) {
                                case$curve$nsim,
                                observed_mcse = case$curve$mcse_cum_pInc,
                                z = 5)),
-        info = paste("20-look strict cumulative inconclusive agrees with ptbf01seq",
+        info = paste("strict cumulative inconclusive agrees with ptbf01seq",
                      strict_reference_cases$bf_prior_id[[i]],
                      strict_reference_cases$evidence_threshold[[i]]))
     expect_true(abs(case$final_row$EN[[1]] - case$reference$EN1) <=
                     max(1, 4 * sqrt(max(case$final_row$VarN[[1]], 0) /
                                     case$final_row$nsim[[1]])),
-                info = paste("20-look strict expected sample size agrees with ptbf01seq",
+                info = paste("strict expected sample size agrees with ptbf01seq",
                              strict_reference_cases$bf_prior_id[[i]],
                              strict_reference_cases$evidence_threshold[[i]]))
 }

@@ -141,10 +141,11 @@ designs, one-sample/paired/two-sample/unequal two-sample paths, Cauchy and
 Student-t priors, shifted nulls, and one-sided/two-sided alternatives. The t
 sequential tests validate manifest and deterministic summary integrity for all
 registered schedules, including the 50/100/200-look stress schedules, and
-compare selected one-sided 20-look summaries against
-`ptbf01seq(strict = TRUE)`. Shifted-null unequal two-sample and paired
-sequential t settings are currently kept as structural checks because the
-strict package oracle shows known approximation gaps at early looks.
+compare selected one-sided summaries against `ptbf01seq(strict = TRUE)`. The
+20-look exact-reference checks remain focused on the original ordinary,
+one-sample, and wrong-direction cases; added wrong-direction and unequal
+allocation cases use five-look exact references so the test suite exercises the
+expanded registry without making the strict t oracle dominate runtime.
 
 The sequential z tests verify all registered schedule IDs are present. They
 compare stratified 5-look cumulative/final summaries against
@@ -330,10 +331,12 @@ thresholds 3/10/30 on short schedules and BF 10 on 50/100/200-look stress
 schedules. Moment-prior sequential references are intentionally limited to 2-
 and 5-look schedules, and uncertain normal-prior references are kept to short
 schedules, because exact many-look references are slow. Sequential t summaries
-are checked against selected strict `ptbf01seq()` references at 20 looks for
-one-sided greater/less cases covering ordinary alternatives, one-sample local
-effects, and wrong-direction adversarial designs; additional shifted-null,
-paired, unequal, and 50/100/200-look t schedules remain covered structurally.
+are checked against selected strict `ptbf01seq()` references: 20-look cases
+cover ordinary alternatives, one-sample local effects, and the historical
+wrong-direction adversarial design, while five-look additions cover localized
+wrong-direction one-sample/paired designs and a strongly unequal allocation
+shifted-null design. Remaining shifted-null, paired, unequal, diffuse-design,
+and 50/100/200-look t schedules remain covered structurally.
 
 Use `--sequential-reference-profile none` to skip the strict sequential package
 oracle while retaining deterministic fixture validation.

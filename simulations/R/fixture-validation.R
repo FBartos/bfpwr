@@ -1333,10 +1333,14 @@ bfpwr_sim_t_sequential_reference_case_grid <- function(fixture,
             "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-0p5-short",
             "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-less-on-t-two-dpoint-0p5-short",
             "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-one-dpoint-0p5-short",
-            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-m0p4-short"
+            "t-tbf01-cauchy-null0-loc0-scale0p70710678-df1-greater-on-t-two-dpoint-m0p4-short",
+            "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-one-dpoint-m0p4-short",
+            "t-tbf01-student-t-null0-loc0p5-scale0p1-df3-greater-on-t-paired-dpoint-m0p4-short",
+            "t-tbf01-student-t-null0p2-loc0p5-scale0p35-df3-greater-on-t-two-dpoint-0p35-n2x2-short"
         ),
-        schedule_id = rep("start20-by10-looks20", 4),
-        evidence_threshold = c(10, 10, 10, 3),
+        schedule_id = c(rep("start20-by10-looks20", 4),
+                        rep("start20-by10-looks05", 3)),
+        evidence_threshold = c(10, 10, 10, 3, 3, 3, 10),
         stringsAsFactors = FALSE)
 
     available <- unique(fixture$final_summary[

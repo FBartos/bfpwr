@@ -67,6 +67,39 @@ bfpwr_sim_design_cases_t <- function() {
             rationale = "One-sample moderate-effect t design."
         ),
         bfpwr_sim_design_t(
+            id = "t-one-dpoint-0p2-short",
+            tier = "short",
+            look_grid = "short",
+            seed = 20262017,
+            dpm = 0.2,
+            dpsd = 0,
+            type = "one.sample",
+            tags = c("one-sample", "local-effect"),
+            rationale = "One-sample local-effect t design."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-one-dnorm-0p5-s0p1-short",
+            tier = "short",
+            look_grid = "short",
+            seed = 20262018,
+            dpm = 0.5,
+            dpsd = 0.1,
+            type = "one.sample",
+            tags = c("one-sample", "uncertain-design", "moderate-effect"),
+            rationale = "One-sample uncertain moderate-effect t design with small spread."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-one-dnorm-0p2-s0p5-short",
+            tier = "short",
+            look_grid = "short",
+            seed = 20262019,
+            dpm = 0.2,
+            dpsd = 0.5,
+            type = "one.sample",
+            tags = c("one-sample", "uncertain-design", "diffuse-design"),
+            rationale = "One-sample diffuse local t design for design-uncertainty checks."
+        ),
+        bfpwr_sim_design_t(
             id = "t-paired-dpoint-0-short",
             tier = "short",
             look_grid = "short",
@@ -89,6 +122,39 @@ bfpwr_sim_design_cases_t <- function() {
             rationale = "Paired moderate-effect t design."
         ),
         bfpwr_sim_design_t(
+            id = "t-paired-dpoint-0p2-short",
+            tier = "short",
+            look_grid = "short",
+            seed = 20262020,
+            dpm = 0.2,
+            dpsd = 0,
+            type = "paired",
+            tags = c("paired", "local-effect"),
+            rationale = "Paired local-effect t design."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-paired-dnorm-0p5-s0p1-short",
+            tier = "short",
+            look_grid = "short",
+            seed = 20262021,
+            dpm = 0.5,
+            dpsd = 0.1,
+            type = "paired",
+            tags = c("paired", "uncertain-design", "moderate-effect"),
+            rationale = "Paired uncertain moderate-effect t design with small spread."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-paired-dnorm-0p2-s0p5-short",
+            tier = "short",
+            look_grid = "short",
+            seed = 20262022,
+            dpm = 0.2,
+            dpsd = 0.5,
+            type = "paired",
+            tags = c("paired", "uncertain-design", "diffuse-design"),
+            rationale = "Paired diffuse local t design for design-uncertainty checks."
+        ),
+        bfpwr_sim_design_t(
             id = "t-two-dpoint-m0p4-short",
             tier = "adversarial",
             look_grid = "short",
@@ -98,6 +164,28 @@ bfpwr_sim_design_cases_t <- function() {
             type = "two.sample",
             tags = c("balanced", "wrong-direction"),
             rationale = "Balanced two-sample wrong-direction t design for one-sided analysis cases."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-one-dpoint-m0p4-short",
+            tier = "adversarial",
+            look_grid = "short",
+            seed = 20262023,
+            dpm = -0.4,
+            dpsd = 0,
+            type = "one.sample",
+            tags = c("one-sample", "wrong-direction"),
+            rationale = "One-sample wrong-direction t design for one-sided analysis cases."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-paired-dpoint-m0p4-short",
+            tier = "adversarial",
+            look_grid = "short",
+            seed = 20262024,
+            dpm = -0.4,
+            dpsd = 0,
+            type = "paired",
+            tags = c("paired", "wrong-direction"),
+            rationale = "Paired wrong-direction t design for one-sided analysis cases."
         ),
         bfpwr_sim_design_t(
             id = "t-two-dpoint-0-n2x1p1-short",
@@ -122,6 +210,66 @@ bfpwr_sim_design_cases_t <- function() {
             n2_multiplier = 1.1,
             tags = c("unequal-groups", "local-effect"),
             rationale = "Unequal two-sample positive-effect t design for checking n1/n2 handling."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-two-dnorm-0p35-s0p2-n2x1p1-short",
+            tier = "adversarial",
+            look_grid = "short",
+            seed = 20262025,
+            dpm = 0.35,
+            dpsd = 0.2,
+            type = "two.sample",
+            n2_multiplier = 1.1,
+            tags = c("unequal-groups", "uncertain-design", "local-effect"),
+            rationale = "Unequal two-sample uncertain local t design for n1/n2 handling under design uncertainty."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-two-dnorm-0-s0p5-n2x1p1-short",
+            tier = "adversarial",
+            look_grid = "short",
+            seed = 20262026,
+            dpm = 0,
+            dpsd = 0.5,
+            type = "two.sample",
+            n2_multiplier = 1.1,
+            tags = c("unequal-groups", "mixed-signs", "uncertain-design"),
+            rationale = "Unequal two-sample mixed-sign t design centered on the null."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-two-dpoint-m0p35-n2x1p1-short",
+            tier = "adversarial",
+            look_grid = "short",
+            seed = 20262027,
+            dpm = -0.35,
+            dpsd = 0,
+            type = "two.sample",
+            n2_multiplier = 1.1,
+            tags = c("unequal-groups", "wrong-direction"),
+            rationale = "Unequal two-sample wrong-direction t design for one-sided n1/n2 checks."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-two-dpoint-0-n2x2-short",
+            tier = "adversarial",
+            look_grid = "short",
+            seed = 20262028,
+            dpm = 0,
+            dpsd = 0,
+            type = "two.sample",
+            n2_multiplier = 2,
+            tags = c("unequal-groups", "large-ratio", "null"),
+            rationale = "Strongly unequal two-sample point-null t design for allocation-ratio stress testing."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-two-dpoint-0p35-n2x2-short",
+            tier = "adversarial",
+            look_grid = "short",
+            seed = 20262029,
+            dpm = 0.35,
+            dpsd = 0,
+            type = "two.sample",
+            n2_multiplier = 2,
+            tags = c("unequal-groups", "large-ratio", "local-effect"),
+            rationale = "Strongly unequal two-sample local-effect t design for allocation-ratio stress testing."
         ),
         bfpwr_sim_design_t(
             id = "t-two-dnorm-0-s0p5-short",
@@ -157,6 +305,40 @@ bfpwr_sim_design_cases_t <- function() {
             rationale = "Long-grid balanced two-sample local-effect t design."
         ),
         bfpwr_sim_design_t(
+            id = "t-one-dpoint-0p2-long",
+            tier = "long",
+            look_grid = "long",
+            seed = 20262030,
+            dpm = 0.2,
+            dpsd = 0,
+            type = "one.sample",
+            tags = c("one-sample", "local-effect", "many-looks"),
+            rationale = "Long-grid one-sample local-effect t design."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-paired-dpoint-0p2-long",
+            tier = "long",
+            look_grid = "long",
+            seed = 20262031,
+            dpm = 0.2,
+            dpsd = 0,
+            type = "paired",
+            tags = c("paired", "local-effect", "many-looks"),
+            rationale = "Long-grid paired local-effect t design."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-two-dpoint-0p2-n2x1p1-long",
+            tier = "long",
+            look_grid = "long",
+            seed = 20262032,
+            dpm = 0.2,
+            dpsd = 0,
+            type = "two.sample",
+            n2_multiplier = 1.1,
+            tags = c("unequal-groups", "local-effect", "many-looks"),
+            rationale = "Long-grid unequal two-sample local-effect t design."
+        ),
+        bfpwr_sim_design_t(
             id = "t-two-dnorm-0p2-s0p1-long",
             tier = "long",
             look_grid = "long",
@@ -168,6 +350,28 @@ bfpwr_sim_design_cases_t <- function() {
             rationale = "Long-grid balanced two-sample local uncertain t design with small spread."
         ),
         bfpwr_sim_design_t(
+            id = "t-one-dnorm-0p2-s0p5-long",
+            tier = "long",
+            look_grid = "long",
+            seed = 20262033,
+            dpm = 0.2,
+            dpsd = 0.5,
+            type = "one.sample",
+            tags = c("one-sample", "uncertain-design", "diffuse-design", "many-looks"),
+            rationale = "Long-grid one-sample diffuse local t design."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-paired-dnorm-0p2-s0p5-long",
+            tier = "long",
+            look_grid = "long",
+            seed = 20262034,
+            dpm = 0.2,
+            dpsd = 0.5,
+            type = "paired",
+            tags = c("paired", "uncertain-design", "diffuse-design", "many-looks"),
+            rationale = "Long-grid paired diffuse local t design."
+        ),
+        bfpwr_sim_design_t(
             id = "t-two-dnorm-0p2-s0p5-long",
             tier = "long",
             look_grid = "long",
@@ -177,6 +381,18 @@ bfpwr_sim_design_cases_t <- function() {
             type = "two.sample",
             tags = c("balanced", "uncertain-design", "diffuse-design", "many-looks"),
             rationale = "Long-grid balanced two-sample diffuse local t design."
+        ),
+        bfpwr_sim_design_t(
+            id = "t-two-dnorm-0p2-s0p5-n2x1p1-long",
+            tier = "long",
+            look_grid = "long",
+            seed = 20262035,
+            dpm = 0.2,
+            dpsd = 0.5,
+            type = "two.sample",
+            n2_multiplier = 1.1,
+            tags = c("unequal-groups", "uncertain-design", "diffuse-design", "many-looks"),
+            rationale = "Long-grid unequal two-sample diffuse local t design."
         )
     )
 }
