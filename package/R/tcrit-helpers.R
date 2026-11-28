@@ -163,65 +163,10 @@
     c(.bfpwr_uniroot_dots(controls), .bfpwr_integrate_dots(controls))
 }
 
-## Locate the maximum that separates the two roots of a two-sided BF. Centered
-## priors have their maximum at the null; shifted priors require a bounded
-## numerical search because a normal-prior approximation can put both roots on
-## the same side of its proposed split point.
-.bfpwr_two_sided_maximum <- function(f, interval, centeredAt = NULL) {
-    if (!is.null(centeredAt)) {
-        value <- .bfpwr_root_value(f = f, x = centeredAt)
-        if (!is.finite(value)) {
-            return(NULL)
-        }
-        return(list(maximum = centeredAt, objective = value))
-    }
-
-    result <- try(stats::optimize(
-        f = function(x) {
-            value <- .bfpwr_root_value(f = f, x = x)
-            if (is.finite(value)) value else -Inf
-        },
-        interval = interval,
-        maximum = TRUE
-    ), silent = TRUE)
-    if (inherits(result, "try-error") || !is.finite(result$maximum) ||
-        !is.finite(result$objective)) {
-        return(NULL)
-    }
-    result
-}
-
-## Try both roots from a proposed split before paying for a numerical maximum.
-## A valid pair must be ordered. When a proposed split is supplied, the roots
-## must also bracket it. Together with the opposite crossing directions passed
-## to uniroot(), this certifies that the two searches found different crossings
-## without requiring another Bayes-factor evaluation between the roots.
-.bfpwr_two_sided_root_pair <- function(f, lowerInterval, upperInterval,
-                                       split = NULL, dots = list()) {
-    ## Keep trial warnings with this pair so a corrected split or an
-    ## unattainable-maximum result can discard diagnostics from rejected roots.
-    warnings <- list()
-    withCallingHandlers({
-        lower <- try(do.call(stats::uniroot, c(list(
-            f = f, interval = lowerInterval, extendInt = "upX"
-        ), dots))$root, silent = TRUE)
-        upper <- try(do.call(stats::uniroot, c(list(
-            f = f, interval = upperInterval, extendInt = "downX"
-        ), dots))$root, silent = TRUE)
-    }, warning = function(w) {
-        warnings[[length(warnings) + 1L]] <<- w
-        invokeRestart("muffleWarning")
-    })
-
-    valid <- !inherits(lower, "try-error") &&
-        !inherits(upper, "try-error") &&
-        is.finite(lower) && is.finite(upper) && lower < upper
-    if (valid && !is.null(split)) {
-        valid <- length(split) == 1 && is.finite(split) &&
-            lower < split && split < upper
-    }
-
-    list(lower = lower, upper = upper, valid = valid, warnings = warnings)
+## Pay for a bounded maximization only when the proposed split lies outside
+## the interval BF01 >= k for a shifted prior.
+.bfpwr_two_sided_maximum <- function(f, interval, tol) {
+    stats::optimize(f, interval, maximum = TRUE, tol = tol)
 }
 
 ## Structured tcrit issues preserve whether a warning is handled internally or
@@ -289,7 +234,8 @@
             }
         }
     }
-    if (length(value) > 0 && all(is.finite(value))) {
+    if ((length(value) > 0 && all(is.finite(value))) ||
+        (length(value) == 2 && !anyNA(value) && value[1] < value[2])) {
         return("ok")
     }
     "search_failed"
@@ -415,9 +361,7 @@
     vapply(results, `[[`, character(1), "status")
 }
 
-## Convert t-boundary statuses into a sequential-search error message. Missing
-## H0 boundaries can be valid empty stopping regions; missing H1 boundaries are
-## terminal failures.
+## An unattainable threshold gives an empty stopping region at this look.
 .bfseq_t_boundary_status_message <- function(results, boundary,
                                              looks = seq_along(results)) {
     stopifnot(boundary %in% c("H0", "H1"))
@@ -427,12 +371,7 @@
     }
 
     statuses <- .bfseq_t_boundary_statuses(results)
-    allowed <- if (boundary == "H0") {
-        c("ok", "impossible", "tail_cutoff")
-    } else {
-        c("ok", "tail_cutoff")
-    }
-    invalid <- !(statuses %in% allowed)
+    invalid <- !(statuses %in% c("ok", "impossible", "tail_cutoff"))
     if (!any(invalid)) {
         return(NULL)
     }
@@ -1156,126 +1095,71 @@ tcrit <- function(k, n1, n2, plocation, pscale, pdf, type, alternative,
     searchDots <- .bfpwr_integrate_dots(dots = dots,
                                         rel.tol.default = 1e-2)
     rootDots <- .bfpwr_uniroot_dots(dots = dots)
-    ## Final BF evaluation used to accept returned roots.
-    rootFun <- function(t) {
-        do.call(tbf01, c(list(t = t, n1 = n1, n2 = n2,
-              plocation = plocation, pscale = pscale,
-              pdf = pdf, type = type, alternative = alternative,
-              log = TRUE, tail.nquad = tail.nquad), integrateDots)) - log(k)
+    pars <- .tbf01_pars(n1, n2, type)
+    region <- .tbf01_prior_region(plocation, pscale, pdf, alternative)
+    logBF <- function(t, controls) {
+        do.call(.tbf01_log_bf, c(list(
+            t = t, df = pars$df, neff = pars$neff, plocation = plocation,
+            pscale = pscale, pdf = pdf, region = region, tail.nquad = tail.nquad
+        ), controls)) - log(k)
     }
-    ## Search evaluation with integration controls from dots.
-    rootFunSearch <- function(t) {
-        do.call(tbf01, c(list(
-            t = t, n1 = n1, n2 = n2, plocation = plocation, pscale = pscale,
-            pdf = pdf, type = type, alternative = alternative, log = TRUE,
-            tail.nquad = tail.nquad
-        ), searchDots)) - log(k)
-    }
-    if (type == "two.sample") {
-        pars <- .tbf01_pars(n1 = n1, n2 = n2, type = type)
-    } else {
-        pars <- .tbf01_pars(n1 = n1, n2 = n1, type = type)
-    }
-    region <- .tbf01_prior_region(plocation = plocation, pscale = pscale,
-                                  pdf = pdf, alternative = alternative)
-    ## Fast direct-integral scout used only to locate candidate brackets.
-    rootFunFast <- function(t) {
-        do.call(.tbf01_log_fast, c(list(
-            t = t, df = pars$df, neff = pars$neff,
-            plocation = plocation, pscale = pscale, pdf = pdf,
-            region = region
-        ), searchDots)) - log(k)
-    }
+    rootFun <- function(t) logBF(t, integrateDots)
+    rootFunSearch <- function(t) logBF(t, searchDots)
 
     if (alternative == "two.sided") {
-        ## guess search range based on search range from z-test BF
-        if (!is.numeric(trange) && trange == "adaptive") {
-            if (type == "two.sample") {
-                neff <- 1/(1/n1 + 1/n2)
-            } else {
-                neff <- n1
-            }
-            se <- 1/sqrt(neff)
-            X <- (plocation^2/pscale^2 + log(1 + pscale^2/se^2) -
-                  2*log(k))*(1 + se^2/pscale^2)
-            if (X <= 0) {
-                X <- 5/k
-            }
-            zcrit <- -plocation*se/pscale^2 + c(-1, 1)*sqrt(X)
-            meant <- mean(zcrit)
-            if (zcrit[1] < zcrit[2]) {
-                searchIntLow <- c(zcrit[1] - 2, meant)
-                searchIntUp <- c(meant, zcrit[2] + 2)
-            } else {
-                searchIntLow <- c(zcrit[2] - 2, meant)
-                searchIntUp <- c(meant, zcrit[1] + 2)
-            }
-        } else {
-            meant <- mean(trange)
-            searchIntLow <- c(trange[1], meant)
-            searchIntUp <- c(meant, trange[2])
+        ## BF10 is convex in u = t/sqrt(df + t^2): for each effect it is
+        ## an average of exponentials linear in u. Thus BF01 >= k is one
+        ## interval, which can have zero, one or two finite endpoints.
+        scale <- sqrt(pars$df)
+        toT <- function(angle) {
+            if (abs(angle) == pi/2) return(sign(angle)*Inf)
+            scale*tan(angle)
         }
-        proposedSplit <- searchIntLow[2]
-        ## Centered priors have a known maximum at zero. Shifted priors use the
-        ## inexpensive approximate split first and pay for a bounded maximum
-        ## only when those searches do not enclose the BF-above-threshold
-        ## region.
-        maxInt <- c(searchIntLow[1], searchIntUp[2])
-        centered <- plocation == 0
-        if (centered && 0 > maxInt[1] && 0 < maxInt[2]) {
-            searchIntLow <- c(maxInt[1], 0)
-            searchIntUp <- c(0, maxInt[2])
+        f <- function(angle) rootFun(toT(angle))
+        interval <- if (is.numeric(trange)) atan(trange/scale) else c(-pi/2, pi/2)
+        split <- max(interval[1], min(interval[2], 0))
+        value <- f(split)
+        if (value <= 0 && plocation != 0) {
+            peak <- .bfpwr_two_sided_maximum(f, interval, rootDots$tol)
+            split <- peak$maximum
+            value <- peak$objective
         }
-        if (centered && k > 1) {
-            maximumValue <- .bfpwr_root_value(f = rootFun, x = 0)
-            if (is.finite(maximumValue) && maximumValue < 0) {
-                .bfpwr_tcrit_warning(
-                    "maximum BF is less than k; BF01 = k impossible",
-                    code = "maximum_bf_below_k",
-                    status = "impossible"
-                )
-                return(c(NaN, NaN))
-            }
+        symmetric <- plocation == 0 && interval[1] == -interval[2]
+        ends <- if (symmetric) rep(f(interval[2]), 2) else vapply(interval, f, numeric(1))
+        if (max(ends) > value) {
+            split <- interval[which.max(ends)]
+            value <- max(ends)
         }
-
-        roots <- .bfpwr_two_sided_root_pair(
-            f = rootFun, lowerInterval = searchIntLow,
-            upperInterval = searchIntUp,
-            split = if (centered) NULL else proposedSplit,
-            dots = rootDots
-        )
-        if (!centered && !roots$valid) {
-            opt <- .bfpwr_two_sided_maximum(f = rootFun, interval = maxInt)
-            if (!is.null(opt) && k > 1 && opt$objective < 0) {
-                .bfpwr_tcrit_warning(
-                    "maximum BF is less than k; BF01 = k impossible",
-                    code = "maximum_bf_below_k",
-                    status = "impossible"
-                )
-                return(c(NaN, NaN))
-            }
-            if (!is.null(opt) && opt$maximum > maxInt[1] &&
-                opt$maximum < maxInt[2]) {
-                searchIntLow <- c(maxInt[1], opt$maximum)
-                searchIntUp <- c(opt$maximum, maxInt[2])
-                roots <- .bfpwr_two_sided_root_pair(
-                    f = rootFun, lowerInterval = searchIntLow,
-                    upperInterval = searchIntUp, dots = rootDots
-                )
-            }
+        if (value <= 0) {
+            .bfpwr_tcrit_warning("maximum BF is less than k; BF01 = k impossible",
+                                 code = "maximum_bf_below_k", status = "impossible")
+            return(c(NaN, NaN))
         }
-        for (w in roots$warnings) warning(w)
-        tcrit <- c(NaN, NaN)
-        lower <- roots$lower
-        upper <- roots$upper
-        if (inherits(lower, "try-error") || inherits(upper, "try-error")) {
-            .bfpwr_tcrit_warning(
-                "Numerical problems: Could not find 2 t-roots",
-                code = "two_roots_failed",
-                status = "search_failed"
-            )
-        } else {
-            tcrit <- c(lower, upper)
+        rootDots$tol <- rootDots$tol/max(1, scale)
+        boundary <- function(side) {
+            edge <- interval[side]
+            fEdge <- ends[side]
+            if (ends[side] >= 0) {
+                if (!is.numeric(trange)) return(toT(edge))
+                ## A two-sided numeric range provides initial brackets. Extend
+                ## a side only when the limiting BF shows there is a crossing.
+                edge <- c(-pi/2, pi/2)[side]
+                fEdge <- f(edge)
+                if (fEdge >= 0) return(toT(edge))
+            }
+            bracket <- c(edge, split)
+            values <- c(fEdge, value)
+            ord <- order(bracket)
+            root <- do.call(stats::uniroot, c(list(
+                f = f, interval = bracket[ord], f.lower = values[ord[1]],
+                f.upper = values[ord[2]]
+            ), rootDots))$root
+            toT(root)
+        }
+        tcrit <- if (symmetric) c(-1, 1)*boundary(2) else vapply(1:2, boundary, numeric(1))
+        if (anyNA(tcrit)) {
+            .bfpwr_tcrit_warning("Numerical problems: Could not find 2 t-roots",
+                                 code = "two_roots_failed", status = "search_failed")
         }
     } else { # one-sided cases
         search_limit_reached <- FALSE
@@ -1297,7 +1181,7 @@ tcrit <- function(k, n1, n2, plocation, pscale, pdf, type, alternative,
             } else {
                 search <- do.call(.bfpwr_one_sided_adaptive_root, c(list(
                     certify_fun = rootFun, search_fun = rootFunSearch,
-                    scout_fun = rootFunFast, alternative = alternative,
+                    scout_fun = rootFunSearch, alternative = alternative,
                     origin = 0, step_scale = 1, try_opposite = FALSE,
                     scout_tolerance = rootDots$tol,
                     search_limit = search_limit

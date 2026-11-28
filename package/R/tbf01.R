@@ -39,211 +39,175 @@
     }
 }
 
-## Gauss-Laguerre nodes for the opposite-sign noncentral-t density; 64 nodes
-## agree with adaptive integration to about 1e-12 on the log scale for
-## df from 1 to 2e4, |t| up to 40 and |ncp| up to 100.
-.tbf01_dnt_nquad <- 64
+## exp(x) - 1 - x loses its quadratic term near zero (large df).
+.tbf01_expm1_minus_x <- function(x, h = expm1(x)) {
+    value <- h - x
+    small <- abs(x) < 1e-4
+    z <- x[small]
+    value[small] <- z^2/2*(1 + z/3*(1 + z/4))
+    value
+}
 
-.tbf01_log_dnt <- function(t, df, ncp) {
-    ## Noncentral-t log density of the statistic t for a vector of ncp values.
-    ## When t and ncp have opposite signs, stats::dt subtracts two nearly equal
-    ## distribution functions and returns noise once the density drops below
-    ## about 1e-11 (t = -4.9, df = 24, ncp = 6 gives log density -29.2 instead
-    ## of -44.8). Noisy integrands make stats::integrate fail and send
-    ## two-sided informed priors to a fallback that is only accurate in the
-    ## one-sided tail. Those values instead use the exact representation
-    ##   dnt(t; df, ncp) = dt(t; df) exp(-ncp^2/2) E[exp(s Y)],
-    ##   Y ~ chi with df + 1 degrees of freedom, s = ncp t/sqrt(df + t^2) < 0.
-    ## With k = df + 1, E[exp(s Y)] = I(s)/I(0) for
-    ## I(s) = integral_0^Inf y^(k - 1) exp(-y^2/2 + s y) dy, where
-    ## I(0) = 2^(k/2 - 1) Gamma(k/2). Writing
-    ## -y^2/2 = a^2/2 - a y - (y - a)^2/2 with a (a - s) = k gives
-    ##   I(s) = exp(a^2/2) Gamma(k) (a - s)^(-k) E[exp(-(G - a)^2/2)],
-    ## G ~ Gamma(k, rate = a - s). G has mean a and, for s < 0, standard
-    ## deviation a/sqrt(k) < 1, so the remaining bounded factor is smooth and
-    ## generalized Gauss-Laguerre quadrature evaluates it accurately.
-    ## t/sqrt(df + t^2) is written as sign(t)/sqrt(1 + df/t^2) so that t^2
-    ## cannot overflow.
-    s <- ncp*sign(t)/sqrt(1 + df/t^2)
-    opposite <- is.finite(s) & s < 0
-    out <- numeric(length(ncp))
-    if (!all(opposite)) {
-        out[!opposite] <- suppressWarnings(
-            stats::dt(x = t, df = df, ncp = ncp[!opposite], log = TRUE)
-        )
-    }
-    if (!any(opposite)) {
-        return(out)
-    }
-
+## For lambda = sqrt(neff)*SMD and u = t/sqrt(df + t^2), the likelihood
+## ratio is E[exp(-lambda^2/2 + u*lambda*Y)], Y ~ chi(df + 1). It remains
+## well defined at u = +/-1, the two limits needed by boundary searches.
+.tbf01_log_ratio <- function(u, v, df, lambda) {
+    if (all(u == 0)) return(-lambda^2/2)
     k <- df + 1
-    s <- s[opposite]
-    a <- (s + sqrt(s^2 + 4*k))/2
-    rule <- .bfpwr_gauss_laguerre(shape = k, n = .tbf01_dnt_nquad)
-    G <- outer(1/(a - s), rule$x)
-    log_correction <- log(drop(exp(-(G - a)^2/2) %*% rule$w))
-    log_I0 <- (k/2 - 1)*log(2) + lgamma(k/2)
-    out[opposite] <- stats::dt(x = t, df = df, log = TRUE) -
-        ncp[opposite]^2/2 + a^2/2 + lgamma(k) - k*log(a - s) - log_I0 +
-        log_correction
-    out
+    shift <- u*lambda
+    logMode <- asinh(shift/(2*sqrt(k)))
+    mode <- sqrt(k)*exp(logMode)
+    curvature <- sqrt(k) + mode
+    curvature <- curvature*sqrt((sqrt(k)/curvature)^2 + (mode/curvature)^2)
+
+    ## In log(Y), the tilted chi density peaks at Y = mode. Integrate in
+    ## units of its local width. The long left panel resolves small df.
+    rule <- .bfpwr_gauss_legendre(48)
+    nodes <- c(36*rule$x - 44, 8*rule$x - 8, 9*rule$x)
+    weights <- c(36*rule$w, 8*rule$w, 9*rule$w)
+    x <- outer(1/curvature, nodes)
+    h <- expm1(x)
+    logDensity <- -k*.tbf01_expm1_minus_x(x, h) - (mode*h)^2/2
+    correction <- log(drop(exp(logDensity) %*% weights)/curvature)
+    logNorm <- -log(k) - stats::dgamma(k/2, shape = k/2, log = TRUE)
+
+    ## For a positive shift, use v^2 = 1 - u^2 without subtracting two
+    ## nearly equal squares. This also covers the polynomial tail at v = 0.
+    exponent <- ifelse(shift >= 0, -(lambda*v)^2/2 + (k/2)*(shift/mode),
+                       -lambda^2/2 + shift*mode/2)
+    k*logMode + exponent + correction - logNorm
 }
 
-.tbf01_log_fast <- function(t, df, neff, plocation, pscale, pdf, region,
-                            rel.tol = getOption("bfpwr.rel.tol", 1e-8), abs.tol = rel.tol,
-                            subdivisions = getOption("bfpwr.subdivisions", 1000), ...) {
-    ## Original one-dimensional integral, evaluated on a centered log scale.
-    if (!is.finite(region$log_norm_const)) {
-        return(NaN)
+## A normal prior on the noncentrality gives a scaled noncentral t.
+## For a centered half-normal prior, the additional factor is a t CDF.
+.tbf01_log_normal_bf10 <- function(u, v, df, m, logG, side) {
+    ## g is the normal prior variance. Work on log scale because even a
+    ## moderate t prior mixes over a wide range of g.
+    logDen <- if (v == 0) 0 else .bfpwr_log1pexp(logG + 2*log(v))
+    logVar <- logG - logDen                  # log(g / (1 + g*v^2))
+    logBF10 <- df/2*.bfpwr_log1pexp(2*log(abs(u)) + logVar) - logDen/2
+    if (m != 0) {
+        logScale <- .bfpwr_log1pexp(logG)/2  # log(sqrt(1 + g))
+        delta <- m*exp(-logScale)
+        logBF10 <- logBF10 + .tbf01_log_ratio(
+            u*exp(-logDen/2), if (v == 0) 0 else exp(log(v) + logScale - logDen/2),
+            df, delta)
+    } else if (side != 0) {
+        arg <- side*sign(u)*exp(log(abs(u)) + (log(df + 1) + logVar)/2)
+        logBF10 <- logBF10 + log(2) + stats::pt(arg, df + 1, log.p = TRUE)
     }
-
-    ## The noncentral-t integral is unreliable in this one-sided tail. Reject
-    ## it as a scout so callers use the stable quadrature path directly.
-    if ((region$lower == 0 && t <= -.tbf01_tail_quadrature_cutoff) ||
-        (region$upper == 0 && t >= .tbf01_tail_quadrature_cutoff)) {
-        return(NaN)
-    }
-
-    eta <- sqrt(neff)
-    log_f0 <- stats::dt(x = t, df = df, log = TRUE)
-
-    ## Same-sign noncentral-t densities still come from stats::dt. Where it
-    ## cannot evaluate them even at the likelihood peak ncp = t (|t| near the
-    ## overflow range), only the opposite-sign part would remain, so leave
-    ## the Bayes factor to the fallback.
-    if (!is.finite(.tbf01_log_dnt(t = t, df = df, ncp = t))) {
-        return(NaN)
-    }
-
-    log_prior <- function(d) {
-        stats::dt(x = (d - plocation)/pscale, df = pdf, log = TRUE) -
-            log(pscale) - region$log_norm_const
-    }
-    log_integrand <- function(d) {
-        suppressWarnings({
-            .tbf01_log_dnt(t = t, df = df, ncp = eta*d) + log_prior(d)
-        })
-    }
-
-    centers <- c(t/eta, plocation, 0)
-    centers <- centers[is.finite(centers) & centers >= region$lower &
-                       centers <= region$upper]
-    if (length(centers) == 0) {
-        centers <- if (is.finite(region$lower)) region$lower else region$upper
-    }
-    log_centers <- vapply(centers, log_integrand, numeric(1))
-    log_center <- max(log_centers, na.rm = TRUE)
-    if (!is.finite(log_center)) {
-        return(NaN)
-    }
-
-    intfun <- function(d) {
-        z <- log_integrand(d) - log_center
-        z[!is.finite(z)] <- -Inf
-        exp(z)
-    }
-    f1 <- try(stats::integrate(f = intfun, lower = region$lower,
-                               upper = region$upper, rel.tol = rel.tol,
-                               abs.tol = abs.tol, subdivisions = subdivisions,
-                               ...)$value,
-              silent = TRUE)
-    if (inherits(f1, "try-error") || !is.finite(f1) || f1 <= 0) {
-        return(NaN)
-    }
-
-    log_f0 - (log(f1) + log_center)
+    logBF10
 }
 
-.tbf01_log_tail_quadrature <- function(t, df, neff, plocation, pscale, pdf,
-                                       region, tail.nquad) {
-    ## Wrong-tail one-sided calls can underflow in the noncentral-t density used
-    ## by the direct integral. Conditional on the observed statistic under H0,
-    ## its chi-square mixing variable has the gamma distribution below. The
-    ## alternative-to-null density ratio is then averaged over this posterior
-    ## and directly over the (possibly truncated) t prior. Integrating the
-    ## truncated prior on probability scale avoids dividing a poorly resolved
-    ## tail integral by a very small prior mass.
-    if (!is.finite(region$log_norm_const)) {
-        return(NaN)
+## A t prior is a normal scale mixture with precision W ~ chi-squared(pdf)/pdf.
+## Integrate on the log-precision scale to keep the mixing peak resolved as
+## pdf increases. Centered priors need only central t probabilities.
+.tbf01_log_scale_mixture <- function(u, v, df, m, s, pdf, side, ...) {
+    shape <- pdf/2
+    rootShape <- sqrt(shape)
+    logConstant <- stats::dgamma(shape, shape, log = TRUE) + log(rootShape)
+    logDensity <- function(x) {
+        y <- x/rootShape
+        logG <- 2*log(s) - y
+        logConstant - shape*.tbf01_expm1_minus_x(y) +
+            .tbf01_log_normal_bf10(u, v, df, m, logG, side)
     }
-
-    nquad <- as.integer(tail.nquad)
-    eta <- sqrt(neff)
-    shapeV <- (df + 1)/2
-    rateV <- (1 + t^2/df)/2
-
-    quadrature <- .bfpwr_gauss_legendre(nquad)
-    u <- quadrature$x
-    w <- quadrature$w
-    v <- stats::qgamma(p = u, shape = shapeV, rate = rateV)
-    ## In the wrong tail the likelihood is concentrated close to the truncation
-    ## point d = 0. A power-transformed probability scale places
-    ## substantially more nodes there while leaving the integral exact after
-    ## its Jacobian is included. This matters for narrow shifted priors, where
-    ## the relevant prior probability can be far below the smallest ordinary
-    ## Gauss-Legendre node.
-    boundaryPower <- 16
-    priorU <- u
-    priorLogJacobian <- rep(0, nquad)
-    if (is.finite(region$lower)) {
-        priorU <- u^boundaryPower
-        priorLogJacobian <- log(boundaryPower) +
-            (boundaryPower - 1)*log(u)
-    } else if (is.finite(region$upper)) {
-        priorU <- 1 - (1 - u)^boundaryPower
-        priorLogJacobian <- log(boundaryPower) +
-            (boundaryPower - 1)*log1p(-u)
-    }
-    priorQuantiles <- if (is.infinite(region$lower)) {
-        if (is.infinite(region$upper)) {
-            stats::qt(p = priorU, df = pdf)
-        } else {
-            ## Compute log(priorU) without forming 1 - a tiny number.
-            logPriorU <- log1p(-(1 - u)^boundaryPower)
-            stats::qt(p = logPriorU + region$log_norm_const, df = pdf,
-                      lower.tail = TRUE, log.p = TRUE)
+    centers <- 0
+    widths <- 1
+    if (v > 0 && pdf < df) {
+        ## A large statistic can put a second peak at a much smaller W.
+        peak <- rootShape*(2*log(s*v) + log((pdf + 1)/(df - pdf)))
+        if (peak < -4) {
+            centers <- c(centers, peak)
+            widths <- c(widths, sqrt(pdf/(pdf + 1)))
         }
-    } else {
-        stats::qt(p = log1p(-priorU) + region$log_norm_const, df = pdf,
-                  lower.tail = FALSE, log.p = TRUE)
     }
-    d <- plocation + pscale*priorQuantiles
-
-    vv <- rep(v, each = nquad)
-    dd <- rep(d, times = nquad)
-    ok <- is.finite(vv) & vv > 0 & is.finite(dd)
-    if (!any(ok)) {
-        return(NaN)
+    if (v == 0 && pdf > df) {
+        ## The df-th moment weights the lower mixing tail by W^(-df/2).
+        centers <- c(centers, rootShape*log1p(-df/pdf))
+        widths <- c(widths, sqrt(pdf/(pdf - df)))
     }
-    vv <- vv[ok]
-    dd <- dd[ok]
-    logWeights <- rep(log(w), each = nquad) +
-        rep(log(w) + priorLogJacobian, times = nquad)
-    logWeights <- logWeights[ok]
-
-    y <- t*sqrt(vv/df)
-    noncentrality <- eta*dd
-    logRatio <- noncentrality*y - noncentrality^2/2
-    logTerms <- logWeights + logRatio
-    logTerms <- logTerms[is.finite(logTerms)]
-    if (length(logTerms) == 0) {
-        return(NaN)
-    }
-
-    -.bfpwr_logspace_sum(logTerms)
+    -.tbf01_log_integral(logDensity, centers, widths, ...)
 }
 
-.tbf01_wrong_tail <- function(t, alternative) {
-    ## Use the slower path only where the direct integral is unreliable. The
-    ## cutoff is empirical: it catches the observed wrong-tail underflow cases
-    ## without slowing down ordinary one-sided calculations.
-    if (alternative == "greater" && t <= -.tbf01_tail_quadrature_cutoff) {
-        return(TRUE)
+.tbf01_log_bf <- function(t, df, neff, plocation, pscale, pdf, region,
+                          rel.tol = getOption("bfpwr.rel.tol", 1e-8),
+                          abs.tol = rel.tol,
+                          subdivisions = getOption("bfpwr.subdivisions", 1000),
+                          tail.nquad = getOption("bfpwr.tail.nquad", 512), ...) {
+    u <- sign(t)/sqrt(1 + df/t^2)
+    v <- if (abs(t) > sqrt(df)) abs(u)*(sqrt(df)/abs(t)) else 1/sqrt(1 + t^2/df)
+    m <- sqrt(neff)*plocation
+    s <- sqrt(neff)*pscale
+    lower <- region$lower
+    upper <- region$upper
+    side <- if (lower == 0) 1 else if (upper == 0) -1 else 0
+    wrongTail <- side != 0 && side*t <= -.tbf01_tail_quadrature_cutoff
+
+    if (is.infinite(pdf) && (side == 0 || m == 0)) {
+        return(-.tbf01_log_normal_bf10(u, v, df, m, 2*log(s), side))
     }
-    if (alternative == "less" && t >= .tbf01_tail_quadrature_cutoff) {
-        return(TRUE)
+    ## On the matching tail the likelihood ratio grows as |lambda|^df.
+    ## Its limit averages to infinity when the prior lacks that moment.
+    if (is.infinite(t) && pdf <= df && (t == lower || t == upper)) return(-Inf)
+    if (m == 0 || (side == 0 && is.infinite(t))) {
+        return(.tbf01_log_scale_mixture(u, v, df, m, s, pdf, side,
+                   fixed = wrongTail, nquad = tail.nquad, rel.tol = rel.tol,
+                   abs.tol = abs.tol, subdivisions = subdivisions, ...))
     }
-    FALSE
+
+    ## Partition the effect axis at the prior and likelihood peaks. In each
+    ## part an arctangent change of variable puts the peak at one end of a
+    ## unit interval and resolves it on its own scale, even for narrow priors.
+    width <- sqrt((1 + v^2)/2)/v
+    fraction <- stats::plogis(2*(log(s) - log(width)))
+    centers <- c(m, (1 - fraction)*m + fraction*t, t)
+    widths <- c(s, min(s, width), width)
+    if (side != 0) {
+        centers <- c(centers, 0)
+        widths <- c(widths, min(s, 1)/(1 + abs(u)*sqrt(df + 1)))
+    }
+    logDensity <- function(d) {
+        .tbf01_log_ratio(u, v, df, d) +
+            stats::dt((d - m)/s, df = pdf, log = TRUE) - log(s) - region$log_norm_const
+    }
+    -.tbf01_log_integral(logDensity, centers, widths, lower, upper,
+                         fixed = wrongTail, nquad = tail.nquad,
+                         rel.tol = rel.tol, abs.tol = abs.tol,
+                         subdivisions = subdivisions, ...)
+}
+
+.tbf01_log_integral <- function(logDensity, centers, widths, lower = -Inf, upper = Inf,
+                                fixed, nquad, ...) {
+    centers <- pmax(lower, pmin(upper, centers))
+    sorted <- order(centers, widths)
+    keep <- sorted[!duplicated(centers[sorted])]
+    centers <- centers[keep]
+    widths <- widths[keep]
+    left <- seq_len(length(centers) - 1L)
+    mid <- centers[left] + diff(centers)*widths[left]/(widths[left] + widths[left + 1L])
+    angles <- c(atan((c(lower, mid) - centers)/widths),
+                atan((c(mid, upper) - centers)/widths))
+    keep <- which(angles != 0)
+    angles <- angles[keep]
+    centers <- rep(centers, 2)[keep]
+    widths <- rep(widths, 2)[keep]
+    logParts <- function(x) {
+        angle <- outer(angles, x)
+        d <- centers + widths*tan(angle)
+        matrix(logDensity(as.vector(d)), nrow = length(angles)) +
+            log(abs(angles)*widths) - 2*log(cos(angle))
+    }
+    if (!fixed) {
+        offset <- max(logParts(c(0, 0.25, 0.5, 0.75, 0.95)))
+        integral <- try(stats::integrate(function(x) colSums(exp(logParts(x) - offset)),
+                                         0, 1, ...)$value, silent = TRUE)
+        if (is.numeric(integral) && is.finite(integral) && integral > 0) {
+            return(log(integral) + offset)
+        }
+    }
+    rule <- .bfpwr_gauss_legendre(nquad)
+    .bfpwr_logspace_sum(as.vector(sweep(logParts(rule$x), 2, log(rule$w), "+")))
 }
 
 tbf01. <- function(t, n, n1 = n, n2 = n, plocation = 0, pscale = 1/sqrt(2),
@@ -300,21 +264,8 @@ tbf01. <- function(t, n, n1 = n, n2 = n, plocation = 0, pscale = 1/sqrt(2),
     region <- .tbf01_prior_region(plocation = plocation, pscale = pscale,
                                   pdf = pdf, alternative = alternative)
 
-    ## Skip the direct integral where it is known to be unreliable, rather
-    ## than spending its integration budget before using stable quadrature.
-    log_bf <- NaN
-    if (!.tbf01_wrong_tail(t, alternative)) {
-        log_bf <- .tbf01_log_fast(t = t, df = pars$df, neff = pars$neff,
-                                  plocation = plocation, pscale = pscale,
-                                  pdf = pdf, region = region, ...)
-    }
-    if (!is.finite(log_bf)) {
-        log_bf <- .tbf01_log_tail_quadrature(
-            t = t, df = pars$df, neff = pars$neff, plocation = plocation,
-            pscale = pscale, pdf = pdf, region = region,
-            tail.nquad = tail.nquad
-        )
-    }
+    log_bf <- .tbf01_log_bf(t, pars$df, pars$neff, plocation, pscale, pdf,
+                            region, tail.nquad = tail.nquad, ...)
 
     if (log) return(log_bf)
     else return(exp(log_bf))
@@ -332,6 +283,7 @@ tbf01. <- function(t, n, n1 = n, n2 = n, plocation = 0, pscale = 1/sqrt(2),
 #'     hypothesis. The Jeffreys-Zellner-Siow (JZS) Bayes factor (Rouder et al.,
 #'     2009) is obtained as a special case by setting the location of the prior
 #'     to zero and the prior degrees of freedom to one, which is the default.
+#'     Infinite prior degrees of freedom give a normal analysis prior.
 #'
 #'  The data are summarized by \eqn{t}-statistics and sample sizes. The
 #'     following types of \eqn{t}-statistics are accepted:
@@ -346,16 +298,18 @@ tbf01. <- function(t, n, n1 = n, n2 = n, plocation = 0, pscale = 1/sqrt(2),
 #'
 #' @md
 #'
-#' @details The Bayes factor is implemented as in equation (5) in Gronau et al.
-#'     (2020), and using suitable truncation in case of one-sided alternatives.
-#'     Most calculations use \code{stats::integrate}. Noncentral-\eqn{t}
-#'     densities whose \eqn{t}-statistic and noncentrality parameter have
-#'     opposite signs, where \code{stats::dt} is unreliable, use an exact
-#'     mixture representation evaluated with Gauss-Laguerre quadrature.
-#'     Extreme wrong-tail one-sided calculations use fixed Gauss-Legendre
-#'     quadrature to avoid noncentral-\eqn{t} underflow. Same-sign
-#'     noncentral-\eqn{t} densities come from \code{stats::dt}, which can be
-#'     inaccurate for extreme \eqn{t}-statistics (very small Bayes factors).
+#' @details The Bayes factor averages the likelihood of the observed
+#'     \eqn{t}-statistic over the analysis prior, truncated for one-sided
+#'     alternatives (Gronau et al., 2020, equation 5). A two-sided normal
+#'     prior gives a scaled noncentral \eqn{t} density. Centered \eqn{t}
+#'     priors can be integrated as scale mixtures of normals. For shifted
+#'     \eqn{t} priors, numerical integration resolves the prior and the
+#'     likelihood on their respective scales.
+#'
+#'     At a fixed sample size, a normal prior or a \eqn{t} prior with more
+#'     degrees of freedom than the test statistic can give a positive limiting
+#'     Bayes factor as the statistic grows. Some evidence thresholds are
+#'     therefore unattainable at small sample sizes.
 #'
 #' @param t \eqn{t}-statistic
 #' @param n Sample size (per group)
@@ -377,8 +331,7 @@ tbf01. <- function(t, n, n1 = n, n2 = n, plocation = 0, pscale = 1/sqrt(2),
 #'     factor should be returned. Defaults to \code{FALSE}
 #' @param tail.nquad Number of Gauss-Legendre quadrature nodes used for stable
 #'     wrong-tail one-sided calculations. Larger values are more accurate but
-#'     slower. Defaults to \code{512} nodes per dimension (the fallback uses
-#'     a two-dimensional product rule).
+#'     slower. Defaults to \code{512} nodes per integration interval.
 #' @param ... Additional arguments passed to \code{stats::integrate} for the
 #'     direct one-dimensional Bayes factor integral. Defaults are
 #'     \code{rel.tol = 1e-8}, \code{abs.tol = rel.tol}, and

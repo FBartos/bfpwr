@@ -389,15 +389,19 @@ expect_equal(
 ## itself is only that accurate), and over all t the density integrates to
 ## one.
 dnt_ncp <- c(-3, -0.5, 0, 0.5, 3)
+log_dnt <- function(t, df, ncp) {
+    bfpwr:::.tbf01_log_ratio(t/sqrt(df + t^2), sqrt(df/(df + t^2)), df, ncp) +
+        dt(t, df, log = TRUE)
+}
 expect_equal(
-    bfpwr:::.tbf01_log_dnt(t = 2, df = 10, ncp = dnt_ncp),
+    log_dnt(t = 2, df = 10, ncp = dnt_ncp),
     stats::dt(x = 2, df = 10, ncp = dnt_ncp, log = TRUE),
     tolerance = 1e-6,
     info = "tbf01 density helper should agree with stats::dt where that is accurate"
 )
 expect_equal(
     stats::integrate(
-        Vectorize(function(t) exp(bfpwr:::.tbf01_log_dnt(t, df = 10, ncp = 3))),
+        Vectorize(function(t) exp(log_dnt(t, df = 10, ncp = 3))),
         lower = -Inf, upper = Inf, rel.tol = 1e-10
     )$value,
     1, tolerance = 1e-8,

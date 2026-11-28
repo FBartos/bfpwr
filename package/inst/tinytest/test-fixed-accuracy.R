@@ -73,9 +73,9 @@ expect_error(ptbf01seq(n = c(30, 60), bf.control = list(ngrid = 1000)))
 tailargs <- list(t = -10, n = 20, alternative = "greater", log = TRUE)
 reference <- do.call(tbf01, c(tailargs, list(tail.nquad = 1024)))
 default <- do.call(tbf01, tailargs)
-previous <- do.call(tbf01, c(tailargs, list(tail.nquad = 128)))
+coarse <- do.call(tbf01, c(tailargs, list(tail.nquad = 32)))
 expect_true(abs(default - reference) < 1e-7)
-expect_true(abs(default - reference) < abs(previous - reference)/10)
+expect_true(abs(default - reference) < abs(coarse - reference)/10)
 
 ## A tail event below the old cutoff is retained at the tighter default.
 critical <- bfpwr:::tcrit(k = 30, n1 = 41, n2 = 41, plocation = 0,

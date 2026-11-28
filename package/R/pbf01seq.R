@@ -335,10 +335,15 @@ print.bfseqdesign <- function(x, digits = max(3L, getOption("digits") - 3L), ...
 
     ## Analysis prior
     if (x$test == "t") {
-        aprior <- paste0(par,
+        aprior <- if (is.infinite(x$pdf)) {
+            paste0(par, "|H1 ~ N(mean = ", round(x$plocation, digits = digits),
+                   ", sd = ", round(x$pscale, digits = digits), ")")
+        } else {
+            paste0(par,
                          "|H1 ~ t(location = ", round(x$plocation, digits = digits),
-                         ", scale = ",round(x$pscale, digits = digits),
+                         ", scale = ", round(x$pscale, digits = digits),
                          ", df = ", round(x$pdf, digits = digits), ")")
+        }
         if (x$alternative == "greater") {
             aprior <- paste0(aprior, "_+")
         }

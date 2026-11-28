@@ -50,8 +50,7 @@ factor should be returned. Defaults to \code{FALSE}}
 
 \item{tail.nquad}{Number of Gauss-Legendre quadrature nodes used for stable
 wrong-tail one-sided calculations. Larger values are more accurate but
-slower. Defaults to \code{512} nodes per dimension (the fallback uses
-a two-dimensional product rule).}
+slower. Defaults to \code{512} nodes per integration interval.}
 
 \item{...}{Additional arguments passed to \code{stats::integrate} for the
 direct one-dimensional Bayes factor integral. Defaults are
@@ -75,6 +74,7 @@ the alternative that the SMD is non-zero. A location-scale
 hypothesis. The Jeffreys-Zellner-Siow (JZS) Bayes factor (Rouder et al.,
 2009) is obtained as a special case by setting the location of the prior
 to zero and the prior degrees of freedom to one, which is the default.
+Infinite prior degrees of freedom give a normal analysis prior.
 
 The data are summarized by \eqn{t}-statistics and sample sizes. The
 following types of \eqn{t}-statistics are accepted:
@@ -89,16 +89,19 @@ change score
 }
 }
 \details{
-The Bayes factor is implemented as in equation (5) in Gronau et al.
-(2020), and using suitable truncation in case of one-sided alternatives.
-Most calculations use \code{stats::integrate}. Noncentral-\eqn{t}
-densities whose \eqn{t}-statistic and noncentrality parameter have
-opposite signs, where \code{stats::dt} is unreliable, use an exact
-mixture representation evaluated with Gauss-Laguerre quadrature.
-Extreme wrong-tail one-sided calculations use fixed Gauss-Legendre
-quadrature to avoid noncentral-\eqn{t} underflow. Same-sign
-noncentral-\eqn{t} densities come from \code{stats::dt}, which can be
-inaccurate for extreme \eqn{t}-statistics (very small Bayes factors).
+The Bayes factor averages the likelihood of the observed
+\eqn{t}-statistic over the analysis prior, truncated for one-sided
+alternatives (Gronau et al., 2020, equation 5). A two-sided normal
+prior gives a scaled noncentral \eqn{t} density. Centered \eqn{t}
+priors can be integrated as scale mixtures of normals. For shifted
+\eqn{t} priors, numerical integration resolves the prior and the
+likelihood on their respective scales.
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{At a fixed sample size, a normal prior or a \eqn{t} prior with more
+degrees of freedom than the test statistic can give a positive limiting
+Bayes factor as the statistic grows. Some evidence thresholds are
+therefore unattainable at small sample sizes.
+}\if{html}{\out{</div>}}
 }
 \examples{
 ## analyses from Rouder et al. (2009):
