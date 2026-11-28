@@ -12,7 +12,9 @@
 #'     stopping boundaries. Can be either \code{"adaptive"} (default) or a
 #'     numeric interval. For one-sided adaptive searches, \code{tail.eps}
 #'     determines the predictive tail cutoff used to stop finite scans. Use a
-#'     numeric interval to force exact boundary searches over that interval.
+#'     numeric interval to restrict a one-sided search to that interval. For
+#'     two-sided tests, the interval supplies initial brackets that can be
+#'     extended to a crossing.
 #' @param tail.eps One-sided adaptive sequential boundary searches stop once the
 #'     marginal predictive tail probability beyond the searched \eqn{t}
 #'     statistic is at most \code{tail.eps}. The same cutoff is used for each

@@ -143,7 +143,9 @@ ptbf01. <- function(k, n, n1 = n, n2 = n, null = 0, plocation = 0,
 #' @param drange Standardized mean difference search range over which the
 #'     critical values are searched for. Can be either set to a numerical range
 #'     or to \code{"adaptive"} (default) which determines the range in an
-#'     adaptive way from the other input parameters
+#'     adaptive way from the other input parameters. For a two-sided test, a
+#'     numeric interval supplies initial brackets that can be extended to a
+#'     crossing. A one-sided numeric search stays inside the supplied interval.
 #' @param tail.eps One-sided adaptive searches stop once the remaining
 #'     predictive probability in the searched tail is at most this value. If no
 #'     boundary is found before that point, the boundary-free probability

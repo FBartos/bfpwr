@@ -23,20 +23,36 @@
     }
 }
 
-.tbf01_prior_region <- function(plocation, pscale, pdf, alternative) {
-    ## One-sided alternatives truncate and renormalize the analysis prior.
-    q0 <- (0 - plocation)/pscale
-    if (alternative == "two.sided") {
-        list(lower = -Inf, upper = Inf, log_norm_const = 0)
-    } else if (alternative == "greater") {
-        list(lower = 0, upper = Inf,
-             log_norm_const = stats::pt(q = q0, df = pdf, lower.tail = FALSE,
-                                        log.p = TRUE))
-    } else {
-        list(lower = -Inf, upper = 0,
-             log_norm_const = stats::pt(q = q0, df = pdf, lower.tail = TRUE,
-                                        log.p = TRUE))
+.tbf01_prior <- function(neff, plocation, pscale, pdf, alternative) {
+    ## Express the prior on the noncentrality lambda = sqrt(neff)*SMD.
+    ## All t evaluations in a boundary search share this normalization.
+    m <- sqrt(neff)*plocation
+    s <- sqrt(neff)*pscale
+    side <- switch(alternative, greater = 1, less = -1, two.sided = 0)
+    q <- -side*(plocation/pscale)
+    logMass <- if (side == 0) 0 else stats::pt(q, pdf, lower.tail = FALSE, log.p = TRUE)
+    logDensity <- function(d) stats::dt((d - m)/s, pdf, log = TRUE) - log(s) - logMass
+    boundaryWidth <- s
+    if (side != 0 && q > 1) {
+        ## In a remote tail the inverse slope of the log density at zero
+        ## gives the scale of the remaining prior mass.
+        boundaryWidth <- s*(1/q + q/pdf)/(1 + 1/pdf)
+        if (logMass < -100) {
+            ## Evaluate the density relative to its value at zero to avoid
+            ## subtracting nearly equal, large negative logarithms.
+            curvature <- (1/pdf + 1/q^2)/(1 + 1/pdf)
+            logRelative <- function(r) {
+                z <- r*(1 + curvature*r/2)
+                if (is.infinite(pdf)) -z else -(pdf + 1)/2*log1p(2*z/(pdf + 1))
+            }
+            mass <- stats::integrate(function(r) exp(logRelative(r)), 0, Inf,
+                                     rel.tol = 1e-12)$value
+            logDensity <- function(d) logRelative(side*d/boundaryWidth) -
+                log(boundaryWidth) - log(mass)
+        }
     }
+    list(location = m, scale = s, df = pdf, side = side,
+         boundaryWidth = boundaryWidth, logDensity = logDensity)
 }
 
 ## exp(x) - 1 - x loses its quadratic term near zero (large df).
@@ -60,11 +76,18 @@
     curvature <- sqrt(k) + mode
     curvature <- curvature*sqrt((sqrt(k)/curvature)^2 + (mode/curvature)^2)
 
-    ## In log(Y), the tilted chi density peaks at Y = mode. Integrate in
-    ## units of its local width. The long left panel resolves small df.
+    ## In log(Y), the tilted log density is k*log(Y) - Y^2/2 + shift*Y.
+    ## Its mode solves Y*(Y - shift) = k. Measure displacement from that
+    ## point in units of the local width. Small df require a longer left tail.
     rule <- .bfpwr_gauss_legendre(48)
-    nodes <- c(36*rule$x - 44, 8*rule$x - 8, 9*rule$x)
-    weights <- c(36*rule$w, 8*rule$w, 9*rule$w)
+    if (k >= 16) {
+        ## Concentration of the chi density makes a single panel sufficient.
+        nodes <- 21*rule$x - 12
+        weights <- 21*rule$w
+    } else {
+        nodes <- c(36*rule$x - 44, 8*rule$x - 8, 9*rule$x)
+        weights <- c(36*rule$w, 8*rule$w, 9*rule$w)
+    }
     x <- outer(1/curvature, nodes)
     h <- expm1(x)
     logDensity <- -k*.tbf01_expm1_minus_x(x, h) - (mode*h)^2/2
@@ -104,10 +127,10 @@
 ## pdf increases. Centered priors need only central t probabilities.
 .tbf01_log_scale_mixture <- function(u, v, df, m, s, pdf, side, ...) {
     shape <- pdf/2
-    rootShape <- sqrt(shape)
-    logConstant <- stats::dgamma(shape, shape, log = TRUE) + log(rootShape)
+    precisionScale <- max(1, sqrt(shape))
+    logConstant <- stats::dgamma(shape, shape, log = TRUE) + log(shape/precisionScale)
     logDensity <- function(x) {
-        y <- x/rootShape
+        y <- x/precisionScale
         logG <- 2*log(s) - y
         logConstant - shape*.tbf01_expm1_minus_x(y) +
             .tbf01_log_normal_bf10(u, v, df, m, logG, side)
@@ -116,32 +139,33 @@
     widths <- 1
     if (v > 0 && pdf < df) {
         ## A large statistic can put a second peak at a much smaller W.
-        peak <- rootShape*(2*log(s*v) + log((pdf + 1)/(df - pdf)))
+        peak <- precisionScale*(2*log(s*v) + log((pdf + 1)/(df - pdf)))
         if (peak < -4) {
             centers <- c(centers, peak)
-            widths <- c(widths, sqrt(pdf/(pdf + 1)))
+            widths <- c(widths, precisionScale/sqrt((pdf + 1)/2))
         }
     }
     if (v == 0 && pdf > df) {
         ## The df-th moment weights the lower mixing tail by W^(-df/2).
-        centers <- c(centers, rootShape*log1p(-df/pdf))
-        widths <- c(widths, sqrt(pdf/(pdf - df)))
+        centers <- c(centers, precisionScale*log1p(-df/pdf))
+        widths <- c(widths, precisionScale/sqrt((pdf - df)/2))
     }
     -.tbf01_log_integral(logDensity, centers, widths, ...)
 }
 
-.tbf01_log_bf <- function(t, df, neff, plocation, pscale, pdf, region,
+.tbf01_log_bf <- function(t, df, prior,
                           rel.tol = getOption("bfpwr.rel.tol", 1e-8),
                           abs.tol = rel.tol,
                           subdivisions = getOption("bfpwr.subdivisions", 1000),
                           tail.nquad = getOption("bfpwr.tail.nquad", 512), ...) {
     u <- sign(t)/sqrt(1 + df/t^2)
     v <- if (abs(t) > sqrt(df)) abs(u)*(sqrt(df)/abs(t)) else 1/sqrt(1 + t^2/df)
-    m <- sqrt(neff)*plocation
-    s <- sqrt(neff)*pscale
-    lower <- region$lower
-    upper <- region$upper
-    side <- if (lower == 0) 1 else if (upper == 0) -1 else 0
+    m <- prior$location
+    s <- prior$scale
+    pdf <- prior$df
+    side <- prior$side
+    lower <- if (side == 1) 0 else -Inf
+    upper <- if (side == -1) 0 else Inf
     wrongTail <- side != 0 && side*t <= -.tbf01_tail_quadrature_cutoff
 
     if (is.infinite(pdf) && (side == 0 || m == 0)) {
@@ -156,21 +180,18 @@
                    abs.tol = abs.tol, subdivisions = subdivisions, ...))
     }
 
-    ## Partition the effect axis at the prior and likelihood peaks. In each
-    ## part an arctangent change of variable puts the peak at one end of a
-    ## unit interval and resolves it on its own scale, even for narrow priors.
+    ## Allow separate peaks near the prior, the likelihood and their
+    ## precision-weighted average. Each is resolved on its own scale.
     width <- sqrt((1 + v^2)/2)/v
     fraction <- stats::plogis(2*(log(s) - log(width)))
     centers <- c(m, (1 - fraction)*m + fraction*t, t)
-    widths <- c(s, min(s, width), width)
+    priorCore <- s*sqrt(min(pdf, 1))
+    widths <- c(priorCore, min(priorCore, width), width)
     if (side != 0) {
         centers <- c(centers, 0)
-        widths <- c(widths, min(s, 1)/(1 + abs(u)*sqrt(df + 1)))
+        widths <- c(widths, min(prior$boundaryWidth, 1/(1 + abs(u)*sqrt(df + 1))))
     }
-    logDensity <- function(d) {
-        .tbf01_log_ratio(u, v, df, d) +
-            stats::dt((d - m)/s, df = pdf, log = TRUE) - log(s) - region$log_norm_const
-    }
+    logDensity <- function(d) .tbf01_log_ratio(u, v, df, d) + prior$logDensity(d)
     -.tbf01_log_integral(logDensity, centers, widths, lower, upper,
                          fixed = wrongTail, nquad = tail.nquad,
                          rel.tol = rel.tol, abs.tol = abs.tol,
@@ -179,13 +200,18 @@
 
 .tbf01_log_integral <- function(logDensity, centers, widths, lower = -Inf, upper = Inf,
                                 fixed, nquad, ...) {
-    centers <- pmax(lower, pmin(upper, centers))
+    ## Split at the midpoints between centers. On either side of a center,
+    ## d = center + width*tan(angle*x) maps x in [0,1] to the half-interval.
+    ## Sum the contributions, including their Jacobians, in one integral.
+    inside <- centers >= lower & centers <= upper
+    centers <- centers[inside]
+    widths <- widths[inside]
     sorted <- order(centers, widths)
     keep <- sorted[!duplicated(centers[sorted])]
     centers <- centers[keep]
     widths <- widths[keep]
     left <- seq_len(length(centers) - 1L)
-    mid <- centers[left] + diff(centers)*widths[left]/(widths[left] + widths[left + 1L])
+    mid <- centers[left] + diff(centers)/2
     angles <- c(atan((c(lower, mid) - centers)/widths),
                 atan((c(mid, upper) - centers)/widths))
     keep <- which(angles != 0)
@@ -261,11 +287,10 @@ tbf01. <- function(t, n, n1 = n, n2 = n, plocation = 0, pscale = 1/sqrt(2),
     }
 
     pars <- .tbf01_pars(n1 = n1, n2 = n2, type = type)
-    region <- .tbf01_prior_region(plocation = plocation, pscale = pscale,
-                                  pdf = pdf, alternative = alternative)
+    stopifnot(pars$df > 0)
+    prior <- .tbf01_prior(pars$neff, plocation, pscale, pdf, alternative)
 
-    log_bf <- .tbf01_log_bf(t, pars$df, pars$neff, plocation, pscale, pdf,
-                            region, tail.nquad = tail.nquad, ...)
+    log_bf <- .tbf01_log_bf(t, pars$df, prior, tail.nquad = tail.nquad, ...)
 
     if (log) return(log_bf)
     else return(exp(log_bf))

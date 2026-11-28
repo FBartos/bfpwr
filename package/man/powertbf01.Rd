@@ -72,7 +72,9 @@ for one-sample and paired designs.}
 \item{drange}{Standardized mean difference search range over which the
 critical values are searched for. Can be either set to a numerical range
 or to \code{"adaptive"} (default) which determines the range in an
-adaptive way from the other input parameters}
+adaptive way from the other input parameters. For a two-sided test, a
+numeric interval supplies initial brackets that can be extended to a
+crossing. A one-sided numeric search stays inside the supplied interval.}
 
 \item{tail.eps}{One-sided adaptive searches stop once the remaining
 predictive probability in the searched tail is at most this value. If no

@@ -72,7 +72,8 @@ expect_equal(tbf01(-20, 7880, plocation = 0.35, pscale = 0.02, pdf = Inf,
 for (pdf in c(30, Inf)) {
     expect_equal(ptbf01(1/6, 2, pdf = pdf), 0)
     expect_equal(ptbf01(1/6, 2, pdf = pdf, lower.tail = FALSE), 1)
-    design <- ptbf01seq(1/6, k0 = 2, n = c(2, 50), pdf = pdf, dpm = 0.5, dpsd = 0)
+    design <- suppressWarnings(ptbf01seq(1/6, k0 = 2, n = c(2, 50), pdf = pdf,
+                                         dpm = 0.5, dpsd = 0))
     expect_equal(design$cumpH1[1], 0)
     expect_true(design$cumpH1[2] > 0)
     searched <- suppressWarnings(powertbf01seq(k1 = 1/6, k0 = 2, power = 0.5,
@@ -83,6 +84,24 @@ one_sided <- suppressWarnings(ptbf01seq(1/6, k0 = 3, n = c(2, 20), pdf = Inf,
     dpm = 1, dpsd = 3, alternative = "greater"))
 expect_equal(one_sided$cumpH1[1], 0)
 expect_true(one_sided$cumpH1[2] > 0)
+
+## A normal tail far beyond its mode concentrates at the truncation point.
+## The Cauchy tail instead has limiting density a/(a + d)^2 for d > 0.
+expect_equal(tbf01(2, 50, plocation = -0.5, pscale = 1e-5, pdf = Inf,
+                   alternative = "greater"), 1, tolerance = 1e-8)
+ref <- integrate(function(d) dt(2, 98, ncp = 5*d)*0.5/(0.5 + d)^2,
+                 0, 10, rel.tol = 1e-10)$value
+expect_equal(tbf01(2, 50, plocation = -0.5, pscale = 1e-8, pdf = 1,
+                   alternative = "greater"), dt(2, 98)/ref, tolerance = 1e-8)
+
+## When the prior and sampling df coincide, BF01 can approach zero slowly.
+## A remote finite crossing must still reproduce its threshold.
+remote <- suppressWarnings(ptbf01seq(1/100, k0 = 2, n = 2, pdf = 2))
+expect_true(all(is.finite(remote$zk1)))
+expect_equal(tbf01(as.numeric(remote$zk1), n = 2, pdf = 2), rep(1/100, 2),
+             tolerance = 1e-6)
+expect_true(is.nan(suppressWarnings(ptbf01(1/6, 50, pdf = Inf, maxiter = 1,
+                                           check.conv = TRUE))))
 
 ## A shifted two-sided prior can cross a threshold in just one tail.
 for (pdf in c(1e8, Inf)) {
